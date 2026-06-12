@@ -1,0 +1,15 @@
+# nixpacks.toml
+# Railway uses Nixpacks for builds. This tells it to install
+# both Node.js (for the server) and Python + matplotlib (for image generation).
+
+[phases.setup]
+nixPkgs = ["python312", "python312Packages.pip"]
+
+[phases.install]
+cmds = [
+    "npm install",
+    "pip install matplotlib numpy --break-system-packages"
+]
+
+[start]
+cmd = "node src/server.js"

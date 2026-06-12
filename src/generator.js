@@ -11,10 +11,10 @@
 //   - Concrete numbers required
 //   - Universal framing before niche landing
 //
-// Formatting polish (June 12 fix - "looks AI-generated"):
-//   - Hyphen/asterisk/dot bullets are converted to → arrows (virality-plan style)
-//   - Exactly ONE tasteful pillar emoji is added to the hook IF the post has none
-//     (system prompt forbids OVERUSE, so we never add more than one automatically)
+// Formatting polish ("looks AI-generated" fixes):
+//   - Hyphen/asterisk/dot bullets -> → arrows
+//   - Exactly ONE pillar emoji added to the hook IF the post has none
+//   - Em-dashes (—) softened to commas (a common AI tell)
 
 'use strict';
 
@@ -32,7 +32,6 @@ const MODELS = [
 
 const MAX_ATTEMPTS = 3;
 
-// One pattern-interrupt emoji per pillar (used only as a fallback if the model adds none)
 const PILLAR_EMOJI = {
   'AI + MICROBIOLOGY': '🧫',
   'CLINICAL BLIND SPOTS': '⚠️',
@@ -43,8 +42,8 @@ const PILLAR_EMOJI = {
   'REFLECTIVE / PHILOSOPHICAL SCIENCE': '🧠',
 };
 
-// Emoji detector that deliberately EXCLUDES the arrow block (U+2190-21FF),
-// so an existing → arrow does not count as an emoji and suppress the fallback.
+// Emoji detector that excludes the arrow block (U+2190-21FF) so → does not
+// count as an emoji and suppress the fallback.
 const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
 
 // ─── Formatting polish ───────────────────────────────────────────────────────
@@ -55,7 +54,18 @@ function polishContent(content, pillar) {
   // 1. Convert "- ", "* ", "• " bullets to "→ " (LinkedIn-native, less "AI" looking)
   out = out.replace(/^[ \t]*[-*•]\s+/gm, '→ ');
 
-  // 2. If the post has zero emoji, add ONE pillar emoji at the end of the hook line.
+  // 2. Soften em-dashes (— U+2014). A tight em-dash is a strong AI tell.
+  //    The prompt asks the model to avoid them; this is the deterministic net.
+  //    Only the em-dash is targeted — ordinary hyphens in words like
+  //    "real-time" or "48-hour" and arrow bullets are left untouched.
+  out = out
+    .replace(/\s*—\s*/g, ', ')        // "word—word" / "word — word" -> "word, word"
+    .replace(/\s+,/g, ',')            // tidy any stray space before a comma
+    .replace(/,\s*,/g, ',')           // collapse double commas
+    .replace(/,\s*([.!?])/g, '$1')    // ", ." -> "."
+    .replace(/,\s*(\n|$)/g, '$1');    // drop a comma left dangling at line end
+
+  // 3. If the post has zero emoji, add ONE pillar emoji at the end of the hook line.
   if (!EMOJI_RE.test(out)) {
     const emoji = PILLAR_EMOJI[pillar] || '🧫';
     const lines = out.split('\n');
@@ -122,10 +132,12 @@ function viralityScore(post) {
   if (repostCandidates.length === 0) feedback.push('No repost-worthy compressive sentence found');
 
   // 3. Human voice (20pts)
+  // Note: em-dashes are now softened in polish, so rhythm is detected via
+  // ellipses, semicolons, short contrastive clauses, and personal voice.
   const humanSignals = [
     /\bi\b|\bmy\b|\bwe\b|\byou\b/i,
     /\bsomething\b|\bsomehow\b|\bsort of\b|\bkind of\b|\bperhaps\b|\bmaybe\b/i,
-    /—|\.\.\.|,\s*but|, and yet|, except/,
+    /\.\.\.|;|,\s*(but|and yet|or never|except)\b|\byet\b/i,
     /\bfrustrat|\bexhaust|\bwonder|\bstruggl|\bworri/i,
   ];
   const humanHits = humanSignals.filter(r => r.test(post)).length;
@@ -188,6 +200,7 @@ The post must:
 - Contain ONE sentence that is short, compressive, and screenshot-worthy on its own.
 - Include at least ONE concrete number, timeframe, or named fact (e.g. "4 hours", "27 samples").
 - For any list of points, use arrow characters (→) at the start of the line. NEVER use hyphens (-), asterisks (*), or dots as bullets. Hyphen bullets look AI-generated.
+- Do NOT use em-dashes (the — character). Use a comma, a period, or split into two short sentences instead. Em-dashes read as AI-written.
 - Include exactly ONE relevant emoji as a pattern-interrupt, placed at the end of the opening hook line. Never more than one. Never decorative emoji clusters.
 - Feel human: subtle uncertainty, friction, or an emotionally unfinished thought.
 - Be readable on mobile: short lines, whitespace between paragraphs, no giant blocks.
@@ -244,7 +257,7 @@ async function generatePost(topicData) {
       ];
 
       const { content: raw, model } = await callOpenRouter(messages, modelIndex);
-      const content = polishContent(raw, pillar); // arrows + emoji cleanup
+      const content = polishContent(raw, pillar); // arrows + em-dash softening + emoji
       const { score, passed, feedback } = viralityScore(content);
 
       console.log(`[generator] V4 score: ${score}/100 | passed: ${passed}`);

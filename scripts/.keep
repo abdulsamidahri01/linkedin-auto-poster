@@ -1,0 +1,4 @@
+# This file is intentionally empty.
+# matplotlib and numpy are installed via nixpacks.toml using Nix packages,
+# NOT via pip/requirements.txt — adding requirements.txt to the repo root
+# causes Railway to detect this as a Python project and break the Node.js build.

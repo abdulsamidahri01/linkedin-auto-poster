@@ -1,0 +1,4 @@
+{
+    "provider": "node",
+    "startCommand": "node src/server.js"
+}

@@ -1,14 +1,15 @@
 # nixpacks.toml
-# Railway uses Nixpacks for builds. This tells it to install
-# both Node.js (for the server) and Python + matplotlib (for image generation).
+# Tells Railway to install Python + pip packages alongside Node.js.
+# requirements.txt is picked up automatically for pip installs.
 
 [phases.setup]
-nixPkgs = ["python312", "python312Packages.pip"]
+nixPkgs = ["python312"]
 
 [phases.install]
 cmds = [
     "npm install",
-    "pip install matplotlib numpy --break-system-packages"
+    "python3 -m pip install --upgrade pip",
+    "python3 -m pip install -r requirements.txt"
 ]
 
 [start]

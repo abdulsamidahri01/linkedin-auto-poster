@@ -1,9 +1,15 @@
 // src/imageGenerator.js
-// Calls the Python script to generate a branded scientific diagram.
-// Returns the path to the generated PNG file.
+// Generates branded scientific diagrams via Python + matplotlib.
 //
-// Includes a startup check so Railway build failures surface clearly
-// in logs rather than silently falling back every single post.
+// INSTALL STRATEGY:
+//   matplotlib is installed at RUNTIME on first use, not at build time.
+//   This avoids Railway Railpack detecting requirements.txt and switching
+//   to Python provider, which breaks the Node.js build.
+//
+// Flow:
+//   1. First call: installMatplotlib() runs pip install silently
+//   2. Subsequent calls: skip install (already done)
+//   3. If Python unavailable: rejects cleanly, scheduler falls back to text-only
 
 'use strict';
 
@@ -13,63 +19,88 @@ const fs = require('fs');
 
 const SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'generate_image.py');
 const OUTPUT_PATH = '/tmp/linkedin_post_image.png';
+const INSTALL_FLAG = '/tmp/.matplotlib_installed';
 
-// ─── Startup check ───────────────────────────────────────────────────────────
-// Called once at server start. Logs a clear warning if Python/matplotlib
-// is missing so we know immediately rather than discovering at post time.
+// ─── Runtime install ──────────────────────────────────────────────────────────
+// Installs matplotlib + numpy once per container lifetime.
+// Subsequent calls check the flag file and skip.
+
+function installMatplotlib() {
+  return new Promise((resolve) => {
+    // Already installed this container lifetime
+    if (fs.existsSync(INSTALL_FLAG)) {
+      return resolve(true);
+    }
+
+    console.log('[imageGen] Installing matplotlib + numpy (first run)...');
+
+    execFile('python3', ['-m', 'pip', 'install', 'matplotlib', 'numpy', '--quiet', '--user'],
+      { timeout: 120_000 },
+      (err, stdout, stderr) => {
+        if (err) {
+          console.warn(`[imageGen] pip install failed: ${err.message}`);
+          console.warn('[imageGen] Image posts disabled — falling back to text-only');
+          return resolve(false);
+        }
+        // Write flag so we skip install next time
+        try { fs.writeFileSync(INSTALL_FLAG, Date.now().toString()); } catch (_) {}
+        console.log('[imageGen] matplotlib installed successfully');
+        resolve(true);
+      }
+    );
+  });
+}
+
+// ─── Startup check ────────────────────────────────────────────────────────────
 
 function checkPythonAvailable() {
   try {
-    execFileSync('python3', ['-c', 'import matplotlib, numpy; print("ok")'],
-      { timeout: 10000 });
-    console.log('[imageGen] Python + matplotlib: ready');
+    execFileSync('python3', ['--version'], { timeout: 5000 });
+    console.log('[imageGen] Python available — matplotlib will install on first use');
     return true;
   } catch (err) {
-    console.warn('[imageGen] WARNING: Python/matplotlib not available — image posts disabled');
-    console.warn('[imageGen] Posts will fall back to text-only until fixed.');
-    console.warn(`[imageGen] Error: ${err.message}`);
+    console.warn('[imageGen] Python not available — image posts disabled');
     return false;
   }
 }
 
 // ─── Generate image ───────────────────────────────────────────────────────────
 
-function generateImage(pillar, topic) {
+async function generateImage(pillar, topic) {
+  // Ensure matplotlib is installed
+  const ready = await installMatplotlib();
+  if (!ready) {
+    throw new Error('matplotlib not available');
+  }
+
   return new Promise((resolve, reject) => {
-    console.log(`[imageGen] Generating image — pillar: ${pillar}`);
-    console.log(`[imageGen] Topic: "${topic}"`);
+    console.log(`[imageGen] Generating — pillar: ${pillar}`);
 
     execFile('python3', [
       SCRIPT_PATH,
       '--pillar', pillar,
       '--topic', topic,
       '--output', OUTPUT_PATH,
-    ], { timeout: 30000 }, (err, stdout, stderr) => {
+    ], { timeout: 60_000 }, (err, stdout, stderr) => {
 
       if (stderr && stderr.trim()) {
-        console.warn(`[imageGen] Python stderr: ${stderr.trim()}`);
+        console.warn(`[imageGen] stderr: ${stderr.trim()}`);
       }
 
       if (err) {
-        console.warn(`[imageGen] Python error: ${err.message}`);
         return reject(new Error(`Image generation failed: ${err.message}`));
       }
 
       try {
         const result = JSON.parse(stdout.trim());
         if (result.status === 'ok' && fs.existsSync(result.path)) {
-          console.log(`[imageGen] Image ready: ${result.path} (${result.size_kb} KB)`);
+          console.log(`[imageGen] Ready: ${result.path} (${result.size_kb} KB)`);
           return resolve(result.path);
         }
-        return reject(new Error(`Image not found at expected path: ${result.path}`));
-      } catch (parseErr) {
-        // Fallback: if file exists despite bad JSON output, still use it
-        if (fs.existsSync(OUTPUT_PATH)) {
-          console.log('[imageGen] Image ready (non-JSON output, file exists)');
-          return resolve(OUTPUT_PATH);
-        }
-        console.warn(`[imageGen] Unexpected output: ${stdout}`);
-        return reject(new Error(`Image generation produced no file. Output: ${stdout}`));
+        return reject(new Error(`Image file not found: ${result.path}`));
+      } catch (_) {
+        if (fs.existsSync(OUTPUT_PATH)) return resolve(OUTPUT_PATH);
+        return reject(new Error(`No image file produced. Output: ${stdout}`));
       }
     });
   });

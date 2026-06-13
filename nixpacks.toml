@@ -1,3 +1,2 @@
-# nixpacks.toml is NOT used by Railway (Railway uses Railpack, not Nixpacks).
-# Python + matplotlib are installed via package.json postinstall script instead.
-# This file is kept as documentation only.
+# Railway uses Railpack, not Nixpacks. This file has no effect.
+# Kept for documentation only.

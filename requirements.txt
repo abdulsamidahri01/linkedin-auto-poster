@@ -1,1 +1,4 @@
- 
+# This file intentionally contains no Python packages.
+# See scripts/generate_image.py for image generation.
+# matplotlib is installed at runtime, not build time.
+# DO NOT add package names here — Railway Railpack will switch to Python provider.

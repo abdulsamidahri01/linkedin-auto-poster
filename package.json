@@ -1,12 +1,13 @@
 {
   "name": "linkedin-auto-poster",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Daily automated LinkedIn posting — microbiology + AI thought leadership",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node src/test.js"
+    "test": "node src/test.js",
+    "postinstall": "python3 -m pip install matplotlib numpy --quiet --user 2>/dev/null || echo '[postinstall] Python/pip not available — image posts will fall back to text-only'"
   },
   "dependencies": {
     "axios": "^1.6.0",

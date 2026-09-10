@@ -1,80 +1,94 @@
 // src/imageGenerator.js
-// Generates branded scientific diagrams via Python + matplotlib.
-//
-// INSTALL STRATEGY:
-//   matplotlib is installed at RUNTIME on first use, not at build time.
-//   This avoids Railway Railpack detecting requirements.txt and switching
-//   to Python provider, which breaks the Node.js build.
+// Generates a post image.
 //
 // Flow:
-//   1. First call: installMatplotlib() runs pip install silently
-//   2. Subsequent calls: skip install (already done)
-//   3. If Python unavailable: rejects cleanly, scheduler falls back to text-only
+//   1. Prefer the OpenAI Images API when OPENAI_API_KEY is configured.
+//   2. Fall back to the local matplotlib scientific diagram if unavailable.
+//   3. If both fail, reject cleanly so the scheduler publishes text-only.
 
 'use strict';
 
 const { execFile, execFileSync } = require('child_process');
+const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 
 const SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'generate_image.py');
 const OUTPUT_PATH = '/tmp/linkedin_post_image.png';
-const INSTALL_FLAG = '/tmp/.matplotlib_installed';
-
-// ─── Runtime install ──────────────────────────────────────────────────────────
-// Installs matplotlib + numpy once per container lifetime.
-// Subsequent calls check the flag file and skip.
-
-function installMatplotlib() {
-  return new Promise((resolve) => {
-    // Already installed this container lifetime
-    if (fs.existsSync(INSTALL_FLAG)) {
-      return resolve(true);
-    }
-
-    console.log('[imageGen] Installing matplotlib + numpy (first run)...');
-
-    execFile('python3', ['-m', 'pip', 'install', 'matplotlib', 'numpy', '--quiet', '--user'],
-      { timeout: 120_000 },
-      (err, stdout, stderr) => {
-        if (err) {
-          console.warn(`[imageGen] pip install failed: ${err.message}`);
-          console.warn('[imageGen] Image posts disabled — falling back to text-only');
-          return resolve(false);
-        }
-        // Write flag so we skip install next time
-        try { fs.writeFileSync(INSTALL_FLAG, Date.now().toString()); } catch (_) {}
-        console.log('[imageGen] matplotlib installed successfully');
-        resolve(true);
-      }
-    );
-  });
-}
-
 // ─── Startup check ────────────────────────────────────────────────────────────
 
 function checkPythonAvailable() {
   try {
-    execFileSync('python3', ['--version'], { timeout: 5000 });
-    console.log('[imageGen] Python available — matplotlib will install on first use');
+    execFileSync('python3', ['-c', 'import matplotlib, numpy'], { timeout: 5000 });
+    console.log('[imageGen] Python + matplotlib available');
     return true;
   } catch (err) {
-    console.warn('[imageGen] Python not available — image posts disabled');
+    console.warn('[imageGen] Python or matplotlib unavailable — local image fallback disabled');
     return false;
   }
 }
 
 // ─── Generate image ───────────────────────────────────────────────────────────
 
-async function generateImage(pillar, topic) {
-  // Ensure matplotlib is installed
-  const ready = await installMatplotlib();
-  if (!ready) {
+function openAiImagePrompt(pillar, topic, postContent) {
+  const contentContext = String(postContent || '').slice(0, 1200);
+  return [
+    'Create a polished, editorial LinkedIn image that supports a science and research post.',
+    `Content pillar: ${pillar}.`,
+    `Post topic: ${topic}.`,
+    contentContext ? `Post context: ${contentContext}` : '',
+    'Use a credible modern scientific visual style: clean composition, navy, teal, and gold accents,',
+    'and a single clear concept related to the topic. Do not include logos, watermarks, readable text,',
+    'charts with invented data, or medical claims. Landscape composition suitable for LinkedIn.',
+  ].filter(Boolean).join(' ');
+}
+
+async function generateOpenAiImage(pillar, topic, postContent) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
+  console.log(`[imageGen] Generating OpenAI image with ${model}`);
+
+  const response = await axios.post(
+    'https://api.openai.com/v1/images/generations',
+    {
+      model,
+      prompt: openAiImagePrompt(pillar, topic, postContent),
+      size: '1536x1024',
+      quality: 'medium',
+    },
+    {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      timeout: 120_000,
+    },
+  );
+
+  const image = response.data?.data?.[0];
+  if (image?.b64_json) {
+    fs.writeFileSync(OUTPUT_PATH, Buffer.from(image.b64_json, 'base64'));
+  } else if (image?.url) {
+    const download = await axios.get(image.url, { responseType: 'arraybuffer', timeout: 60_000 });
+    fs.writeFileSync(OUTPUT_PATH, download.data);
+  } else {
+    throw new Error('OpenAI did not return an image payload');
+  }
+
+  if (!fs.existsSync(OUTPUT_PATH) || fs.statSync(OUTPUT_PATH).size === 0) {
+    throw new Error('OpenAI image file was not created');
+  }
+
+  console.log(`[imageGen] OpenAI image ready: ${OUTPUT_PATH}`);
+  return OUTPUT_PATH;
+}
+
+async function generateMatplotlibImage(pillar, topic) {
+  if (!checkPythonAvailable()) {
     throw new Error('matplotlib not available');
   }
 
   return new Promise((resolve, reject) => {
-    console.log(`[imageGen] Generating — pillar: ${pillar}`);
+    console.log(`[imageGen] Generating local scientific diagram — pillar: ${pillar}`);
 
     execFile('python3', [
       SCRIPT_PATH,
@@ -104,6 +118,20 @@ async function generateImage(pillar, topic) {
       }
     });
   });
+}
+
+async function generateImage(pillar, topic, postContent) {
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      return await generateOpenAiImage(pillar, topic, postContent);
+    } catch (err) {
+      console.warn(`[imageGen] OpenAI image failed: ${err.message}; using local fallback`);
+    }
+  } else {
+    console.log('[imageGen] OPENAI_API_KEY not configured — using local image fallback');
+  }
+
+  return generateMatplotlibImage(pillar, topic);
 }
 
 module.exports = { generateImage, checkPythonAvailable };

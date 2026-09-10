@@ -55,7 +55,7 @@ async function runDailyJob(jobId) {
     let hasImage = false;
 
     try {
-      const imagePath = await generateImage(topicData.pillar, topicData.topic);
+      const imagePath = await generateImage(topicData.pillar, topicData.topic, generated.content);
       console.log(`[scheduler] Image generated: ${imagePath}`);
 
       const imageUrn = await uploadImage(imagePath);

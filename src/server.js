@@ -16,7 +16,7 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-const VERSION = '2.1.0'; // image pipeline
+const VERSION = '2.2.0'; // OpenAI image pipeline with local fallback
 
 // ── Startup checks ────────────────────────────────────────────────────────────
 

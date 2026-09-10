@@ -1,4 +1,7 @@
 {
     "provider": "node",
-    "startCommand": "node src/server.js"
+    "startCommand": "node src/server.js",
+    "packages": {
+        "python": "3.13"
+    }
 }

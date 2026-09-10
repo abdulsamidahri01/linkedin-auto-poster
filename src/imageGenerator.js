@@ -15,11 +15,19 @@ const fs = require('fs');
 
 const SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'generate_image.py');
 const OUTPUT_PATH = '/tmp/linkedin_post_image.png';
+const PYTHON_PACKAGES = path.join(__dirname, '..', 'python-packages');
+
+function pythonEnv() {
+  return {
+    ...process.env,
+    PYTHONPATH: [PYTHON_PACKAGES, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
+  };
+}
 // ─── Startup check ────────────────────────────────────────────────────────────
 
 function checkPythonAvailable() {
   try {
-    execFileSync('python3', ['-c', 'import matplotlib, numpy'], { timeout: 5000 });
+    execFileSync('python3', ['-c', 'import matplotlib, numpy'], { timeout: 5000, env: pythonEnv() });
     console.log('[imageGen] Python + matplotlib available');
     return true;
   } catch (err) {
@@ -95,7 +103,7 @@ async function generateMatplotlibImage(pillar, topic) {
       '--pillar', pillar,
       '--topic', topic,
       '--output', OUTPUT_PATH,
-    ], { timeout: 60_000 }, (err, stdout, stderr) => {
+    ], { timeout: 60_000, env: pythonEnv() }, (err, stdout, stderr) => {
 
       if (stderr && stderr.trim()) {
         console.warn(`[imageGen] stderr: ${stderr.trim()}`);

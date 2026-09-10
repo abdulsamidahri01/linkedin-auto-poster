@@ -16,7 +16,7 @@ const axios = require('axios');
 const fs = require('fs');
 
 const LINKEDIN_API = 'https://api.linkedin.com';
-const LINKEDIN_VERSION = '202506';
+const LINKEDIN_VERSION = '202608';
 
 async function getAuthorUrn(token) {
   if (process.env.LINKEDIN_SUB) {

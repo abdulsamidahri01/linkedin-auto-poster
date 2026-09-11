@@ -41,13 +41,18 @@ function checkPythonAvailable() {
 function openAiImagePrompt(pillar, topic, postContent) {
   const contentContext = String(postContent || '').slice(0, 1200);
   return [
-    'Create a polished, editorial LinkedIn image that supports a science and research post.',
+    'Create a restrained editorial visual for a science and research LinkedIn post.',
     `Content pillar: ${pillar}.`,
     `Post topic: ${topic}.`,
     contentContext ? `Post context: ${contentContext}` : '',
-    'Use a credible modern scientific visual style: clean composition, navy, teal, and gold accents,',
-    'and a single clear concept related to the topic. Do not include logos, watermarks, readable text,',
-    'charts with invented data, or medical claims. Landscape composition suitable for LinkedIn.',
+    'Choose exactly one concrete subject, setting, or process from the post and make it the whole image.',
+    'Use an understated magazine-editorial treatment: realistic laboratory, field, clinical, or infrastructure detail;',
+    'natural materials and lighting; muted ink, stone, and one restrained teal accent; generous negative space.',
+    'The image should feel observed and specific, not futuristic or decorative.',
+    'Never use a globe, planet Earth, holograms, neon circuitry, floating particles, molecular swirls,',
+    'generic digital networks, split-screen collages, or a futuristic city unless the post explicitly requires it.',
+    'Do not include people posed for camera, logos, watermarks, readable text, invented charts, or medical claims.',
+    'Landscape composition suitable for LinkedIn, with a single focal point and no visual clutter.',
   ].filter(Boolean).join(' ');
 }
 
@@ -142,4 +147,4 @@ async function generateImage(pillar, topic, postContent) {
   return generateMatplotlibImage(pillar, topic);
 }
 
-module.exports = { generateImage, checkPythonAvailable };
+module.exports = { generateImage, checkPythonAvailable, openAiImagePrompt };

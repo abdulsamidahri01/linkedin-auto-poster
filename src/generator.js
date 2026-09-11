@@ -11,10 +11,7 @@
 //   - Concrete numbers required
 //   - Universal framing before niche landing
 //
-// Formatting polish ("looks AI-generated" fixes):
-//   - Hyphen/asterisk/dot bullets -> → arrows
-//   - Exactly ONE pillar emoji added to the hook IF the post has none
-//   - Em-dashes (—) softened to commas (a common AI tell)
+// Formatting polish keeps the writing readable without forcing a template.
 
 'use strict';
 
@@ -32,64 +29,29 @@ const MODELS = [
 
 const MAX_ATTEMPTS = 3;
 
-const PILLAR_EMOJI = {
-  'AI + MICROBIOLOGY': '🧫',
-  'CLINICAL BLIND SPOTS': '⚠️',
-  'MICROBIAL INTELLIGENCE': '🧫',
-  'ACADEMIC / RESEARCH REALITY': '🔬',
-  'FUTURE HEALTHCARE SYSTEMS': '🧬',
-  'PUBLIC HEALTH + AMR': '🌍',
-  'REFLECTIVE / PHILOSOPHICAL SCIENCE': '🧠',
-};
-
-// Emoji detector that excludes the arrow block (U+2190-21FF) so → does not
-// count as an emoji and suppress the fallback.
-const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
-
 // ─── Formatting polish ───────────────────────────────────────────────────────
 
-function polishContent(content, pillar) {
-  let out = content;
-
-  // 1. Convert "- ", "* ", "• " bullets to "→ " (LinkedIn-native, less "AI" looking)
-  out = out.replace(/^[ \t]*[-*•]\s+/gm, '→ ');
-
-  // 2. Soften em-dashes (— U+2014). A tight em-dash is a strong AI tell.
-  //    The prompt asks the model to avoid them; this is the deterministic net.
-  //    Only the em-dash is targeted — ordinary hyphens in words like
-  //    "real-time" or "48-hour" and arrow bullets are left untouched.
-  out = out
+function polishContent(content) {
+  return content
+    .trim()
     .replace(/\s*—\s*/g, ', ')        // "word—word" / "word — word" -> "word, word"
     .replace(/\s+,/g, ',')            // tidy any stray space before a comma
     .replace(/,\s*,/g, ',')           // collapse double commas
     .replace(/,\s*([.!?])/g, '$1')    // ", ." -> "."
     .replace(/,\s*(\n|$)/g, '$1');    // drop a comma left dangling at line end
-
-  // 3. If the post has zero emoji, add ONE pillar emoji at the end of the hook line.
-  if (!EMOJI_RE.test(out)) {
-    const emoji = PILLAR_EMOJI[pillar] || '🧫';
-    const lines = out.split('\n');
-    const i = lines.findIndex(l => l.trim().length > 0); // first non-empty line = hook
-    if (i !== -1) {
-      lines[i] = lines[i].replace(/\s*$/, '') + ' ' + emoji;
-      out = lines.join('\n');
-    }
-  }
-
-  return out;
 }
 
 // ─── Ending rotation ─────────────────────────────────────────────────────────
 
 const ENDING_TYPES = [
-  { type: 'question', instruction: 'End with a single genuine question directed at clinicians, lab professionals, or scientists - something they can answer from their own experience. Specific, not vague.' },
-  { type: 'open_loop', instruction: 'End with an unresolved observation or quiet implication - no question mark. Leave the reader sitting with an uncomfortable thought.' },
-  { type: 'invitation', instruction: 'End with a direct invitation to a specific audience (clinicians, lab directors, AI engineers, PhD students) to share their experience. One line.' },
-  { type: 'reflection', instruction: 'End with a short philosophical or strategic reflection - a single sentence that reframes the whole post. No CTA, no question.' },
-  { type: 'question', instruction: 'End with a short, provocative question that challenges the reader assumptions about their own system or workflow.' },
-  { type: 'prediction', instruction: 'End with a quiet, specific prediction about where this is heading - one sentence, stated as fact.' },
-  { type: 'invitation', instruction: 'End by naming exactly who you want to hear from and what to share. Make them feel like the expert in the room.' },
-  { type: 'open_loop', instruction: 'End mid-thought - the kind of sentence that trails off into implication. Do not resolve it.' },
+  { type: 'implication', instruction: 'End with the practical implication for a lab, clinic, researcher, or public-health system. No question or CTA.' },
+  { type: 'open_loop', instruction: 'End with an unresolved but precise observation. No question mark and no dramatic cliffhanger.' },
+  { type: 'contrast', instruction: 'End with one plain contrast that clarifies what has changed and what has not. No CTA.' },
+  { type: 'reflection', instruction: 'End with a short grounded reflection that reframes the evidence. No CTA or question.' },
+  { type: 'consequence', instruction: 'End by naming the concrete consequence of ignoring the issue. Keep it factual rather than alarming.' },
+  { type: 'prediction', instruction: 'End with one measured, specific prediction about where this is heading. Do not overstate certainty.' },
+  { type: 'practice', instruction: 'End with one practical change worth considering in day-to-day scientific or clinical work. No CTA.' },
+  { type: 'open_loop', instruction: 'End with a quiet observation that leaves room for thought, not an unfinished sentence.' },
 ];
 
 function selectEndingType() {
@@ -183,8 +145,8 @@ function buildUserPrompt(topic, pillar, tone, attempt = 1) {
 
   const escalations = [
     '',
-    '\n\nIMPORTANT: The previous draft lacked emotional realism. Add one specific, uncomfortable truth from real lab or clinical experience.',
-    '\n\nIMPORTANT: The previous draft was still too smooth. Make the hook more confrontational. The repost sentence must be sharp enough to screenshot. Remove every generic phrase.',
+    '\n\nIMPORTANT: The previous draft sounded too polished. Replace abstractions with one concrete observation and use plainer words.',
+    '\n\nIMPORTANT: The previous draft still sounded templated. Remove dramatic phrasing, lists, emojis, and slogans. Write as a person explaining one useful implication to peers.',
   ];
   const escalation = escalations[Math.min(attempt - 1, escalations.length - 1)];
 
@@ -195,16 +157,15 @@ Topic: ${topic}
 Write a complete LinkedIn post on this topic.
 
 The post must:
-- Open by connecting the topic to a universal human truth or tension FIRST, then land on the specific microbiology or clinical reality. Non-scientists should want to read line 2.
-- First 2 lines: immediate tension or curiosity. No definitions. No textbook openers.
-- Contain ONE sentence that is short, compressive, and screenshot-worthy on its own.
-- Include at least ONE concrete number, timeframe, or named fact (e.g. "4 hours", "27 samples").
-- For any list of points, use arrow characters (→) at the start of the line. NEVER use hyphens (-), asterisks (*), or dots as bullets. Hyphen bullets look AI-generated.
-- Do NOT use em-dashes (the — character). Use a comma, a period, or split into two short sentences instead. Em-dashes read as AI-written.
-- Include exactly ONE relevant emoji as a pattern-interrupt, placed at the end of the opening hook line. Never more than one. Never decorative emoji clusters.
-- Feel human: subtle uncertainty, friction, or an emotionally unfinished thought.
-- Be readable on mobile: short lines, whitespace between paragraphs, no giant blocks.
-- Be between 130 and 250 words total.
+- Use a calm, plain-spoken, fact-led LinkedIn voice. Do not imitate any individual writer or reuse their phrasing.
+- Start with a clear observation, claim, or surprising fact about the topic. No grand statement about humanity, no rhetorical question, and no dramatic hook formula.
+- Develop one argument through 5-8 short paragraphs. Each paragraph should add a fact, consequence, contrast, or grounded observation.
+- Use a specific number, timeframe, or named source only when it is genuinely known from the topic. Never invent data, research, quotes, clinical cases, or personal experience.
+- Include one concise line that naturally crystallizes the argument, but never write a slogan just to be screenshot-worthy.
+- End with the practical implication or an unresolved, thoughtful observation. Do not force a CTA.
+- Use no emojis, decorative symbols, bullet lists, headings, or markdown. Avoid em-dashes and buzzwords.
+- Be readable on mobile: plain sentences, whitespace between paragraphs, and no giant blocks.
+- Be between 160 and 280 words total.
 - ${ending.instruction}${escalation}`;
 }
 
@@ -257,7 +218,7 @@ async function generatePost(topicData) {
       ];
 
       const { content: raw, model } = await callOpenRouter(messages, modelIndex);
-      const content = polishContent(raw, pillar); // arrows + em-dash softening + emoji
+      const content = polishContent(raw);
       const { score, passed, feedback } = viralityScore(content);
 
       console.log(`[generator] V4 score: ${score}/100 | passed: ${passed}`);
@@ -292,4 +253,4 @@ async function generatePost(topicData) {
   };
 }
 
-module.exports = { generatePost, viralityScore };
+module.exports = { generatePost, viralityScore, buildUserPrompt, polishContent };

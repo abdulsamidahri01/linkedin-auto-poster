@@ -109,7 +109,14 @@ function viralityScore(post) {
   if (hasProperEnding && lastPara.split(/\s+/).length <= 32) score += 10;
   else feedback.push('Ending should be a short statement, not a question or CTA');
 
-  return { score, passed: score >= 72, feedback };
+  // A polished but unsourced draft must never pass editorial review. The
+  // quotation remains optional because an inaccurate quote is worse than a
+  // clearly attributed paraphrase, but a named source plus concrete detail is
+  // mandatory for every published post.
+  const hasEvidenceAnchor = hasNamedSource && hasConcreteDetail;
+  if (!hasEvidenceAnchor) feedback.push('Evidence anchor is mandatory for publication');
+
+  return { score, passed: score >= 72 && hasEvidenceAnchor, feedback };
 }
 
 // ─── User prompt builder ─────────────────────────────────────────────────────

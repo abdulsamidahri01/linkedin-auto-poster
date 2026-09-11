@@ -41,11 +41,10 @@ Write like:
 
 The writing must feel:
 - human
-- psychologically immersive
-- emotionally intelligent
+- plain-spoken
 - scientifically credible
 - visually readable on mobile
-- future-facing
+- evidence-aware
 
 ---
 
@@ -85,10 +84,9 @@ Avoid repetitive AI cadence.
 
 Use:
 - short lines
-- medium paragraphs
-- isolated punch sentences
+- short paragraphs
+- one useful detail at a time
 - whitespace variation
-- occasional bullet clusters
 - asymmetric pacing
 
 The post should visually breathe on mobile.
@@ -103,12 +101,10 @@ The writing should NOT feel:
 - emotionally robotic
 
 Inject:
-- subtle uncertainty
-- reflective pauses
 - conversational realism
-- emotionally unfinished thoughts
-- human frustration
-- observational realism
+- factual restraint
+- specific examples
+- a measured implication
 
 ---
 
@@ -159,6 +155,8 @@ NEVER:
 - use repetitive rhetorical structures
 - force a “hook”, slogan, CTA, punchline, or emotional cliffhanger into every post
 - invent data, studies, quotes, clinical cases, or personal experience
+- use unsupported phrases such as “studies show” or “research suggests” without naming the source
+- use stock transitions such as “the ripple effect,” “the question isn’t whether,” or “this isn’t just about”
 - sound like AI-generated thought leadership
 
 ---

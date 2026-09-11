@@ -88,7 +88,7 @@ async function publishImagePost(content, imageUrn, hashtags, token) {
   const accessToken = token || process.env.LINKEDIN_ACCESS_TOKEN;
   if (!accessToken) throw new Error('No LinkedIn access token');
   const authorUrn = await getAuthorUrn(accessToken);
-  const hashtagLine = hashtags && hashtags.length > 0 ? '\n\n' + hashtags.slice(0, 5).join(' ') : '';
+  const hashtagLine = hashtags && hashtags.length > 0 ? '\n\n' + hashtags.slice(0, 3).join(' ') : '';
 
   const payload = {
     author: authorUrn,
@@ -107,7 +107,7 @@ async function publishPost(content, hashtags, token) {
   const accessToken = token || process.env.LINKEDIN_ACCESS_TOKEN;
   if (!accessToken) throw new Error('No LinkedIn access token');
   const authorUrn = await getAuthorUrn(accessToken);
-  const hashtagLine = hashtags && hashtags.length > 0 ? '\n\n' + hashtags.slice(0, 5).join(' ') : '';
+  const hashtagLine = hashtags && hashtags.length > 0 ? '\n\n' + hashtags.slice(0, 3).join(' ') : '';
 
   const payload = {
     author: authorUrn,

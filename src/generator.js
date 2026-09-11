@@ -1,15 +1,5 @@
 // src/generator.js
-// Content generation via OpenRouter + V4 virality filter
-//
-// V4 fix over old V3:
-//   V3 used 4 binary gates - any one failure rejected the post.
-//   V4 uses a scored rubric (0-100, pass at 60+).
-//
-// Virality plan alignment:
-//   - Ending rotation (questions / open loops / invitations / reflections)
-//   - Engagement triggers
-//   - Concrete numbers required
-//   - Universal framing before niche landing
+// Content generation via OpenRouter + concise editorial quality filter.
 //
 // Formatting polish keeps the writing readable without forcing a template.
 
@@ -65,77 +55,61 @@ function selectEndingType() {
 
 function viralityScore(post) {
   const lines = post.split('\n').map(l => l.trim()).filter(Boolean);
-  const words = post.split(/\s+/);
+  const words = post.trim().split(/\s+/);
   const paragraphs = post.split(/\n\n+/).filter(p => p.trim());
   const feedback = [];
   let score = 0;
 
-  // 1. Hook quality (25pts)
-  const hookLine = lines.slice(0, 2).join(' ').toLowerCase();
-  const hookSignals = [
-    /\bnot\b|\bnever\b|\bstill\b|\bwhy\b|\bwhat if\b|\bno one\b|\bnobody\b/,
-    /\?\s*$|\.\s*$/,
-    /\bquietly\b|\bactually\b|\bsilently\b|\bslowly\b|\bhidden\b|\bunspoken\b/,
-    /\bfail|\bbreak|\bwrong|\bcost|\blose|\bkill|\bcrisis|\blag|\bdelay/,
-  ];
-  const hookHits = hookSignals.filter(r => r.test(hookLine)).length;
-  score += Math.min(25, hookHits * 7 + (hookLine.length > 40 ? 4 : 0));
-  if (hookHits < 2) feedback.push('Hook lacks tension or curiosity signal');
+  // 1. Clear opening (20pts)
+  const opening = paragraphs[0] || '';
+  const openingWords = opening.split(/\s+/).length;
+  const cannedOpening = /^(in today'?s|imagine|what if|in a world|the future of|here'?s the thing)/i.test(opening);
+  if (openingWords <= 35 && !cannedOpening && !/\?\s*$/.test(opening)) score += 20;
+  else feedback.push('Opening is long, rhetorical, or formulaic');
 
-  // 2. Repost sentence (20pts)
-  const shortSentences = (post.match(/[^.!?]+[.!?]/g) || []).filter(s => {
-    const wc = s.trim().split(/\s+/).length;
-    return wc >= 5 && wc <= 18;
-  });
-  const repostCandidates = shortSentences.filter(s =>
-    /\b(not|never|still|no longer|only|already|fastest|slowest|worst|best)\b/i.test(s)
-  );
-  score += repostCandidates.length >= 1 ? 20 : 0;
-  if (repostCandidates.length === 0) feedback.push('No repost-worthy compressive sentence found');
-
-  // 3. Human voice (20pts)
-  // Note: em-dashes are now softened in polish, so rhythm is detected via
-  // ellipses, semicolons, short contrastive clauses, and personal voice.
-  const humanSignals = [
-    /\bi\b|\bmy\b|\bwe\b|\byou\b/i,
-    /\bsomething\b|\bsomehow\b|\bsort of\b|\bkind of\b|\bperhaps\b|\bmaybe\b/i,
-    /\.\.\.|;|,\s*(but|and yet|or never|except)\b|\byet\b/i,
-    /\bfrustrat|\bexhaust|\bwonder|\bstruggl|\bworri/i,
-  ];
-  const humanHits = humanSignals.filter(r => r.test(post)).length;
-  score += Math.min(20, humanHits * 6);
-  if (humanHits < 2) feedback.push('Voice too smooth - missing human friction or uncertainty');
-
-  // 4. Mobile readability (15pts)
-  const longLines = lines.filter(l => l.split(/\s+/).length > 25).length;
-  const hasWhitespace = paragraphs.length >= 3;
+  // 2. Concision + mobile readability (30pts)
   const wordCount = words.length;
-  let readScore = 0;
-  if (longLines === 0) readScore += 5;
-  else if (longLines <= 2) readScore += 2;
-  if (hasWhitespace) readScore += 5;
-  if (wordCount >= 120 && wordCount <= 280) readScore += 5;
-  score += readScore;
-  if (longLines > 3) feedback.push('Too many long lines - not readable on mobile');
-  if (!hasWhitespace) feedback.push('Missing whitespace breaks between paragraphs');
+  const paragraphWordCounts = paragraphs.map(p => p.trim().split(/\s+/).length);
+  const longParagraphs = paragraphWordCounts.filter(count => count > 42).length;
+  if (wordCount >= 110 && wordCount <= 190) score += 15;
+  else feedback.push(`Length is ${wordCount} words; target is 110-190`);
+  if (paragraphs.length >= 5 && paragraphs.length <= 9) score += 8;
+  else feedback.push('Use 5-9 short paragraphs');
+  if (longParagraphs === 0) score += 7;
+  else feedback.push('One or more paragraphs are too dense');
 
-  // 5. Scientific credibility + concrete numbers (10pts)
-  const sciTerms = [
-    /\b(biofilm|quorum|resistance|AMR|pathogen|diagnostic|sequenc|culture|antibiotic|microbi|clinical|epidemi|surveillance|genomic|phage|microbiome|stewardship|phenotyp)\b/i,
-    /\b(AI|algorithm|model|predict|machine learning|neural|data|automat)\b/i,
-    /\b\d{4}\b|\bper cent\b|\b\d+%\b|\bmillion\b|\bbillion\b|\b\d+ (hour|day|week|year|month|patient|lab|test|sample)\b/i,
+  // 3. Evidence anchor (30pts)
+  const hasNamedSource = /\b(according to|reported by|published by|a study in|a report from|data from|WHO|CDC|NIH|NHS|Lancet|Nature|Science|BMJ|JAMA|UNICEF|World Bank)\b/i.test(post);
+  const hasConcreteDetail = /\b\d{4}\b|\b\d+(?:\.\d+)?%\b|\b\d+(?:\.\d+)?\s*(?:million|billion|hour|day|week|year|month|patient|sample|test|case|country|hospital)s?\b/i.test(post);
+  const hasAttributedQuote = /[“"][^”"]{12,180}[”"]/u.test(post) && hasNamedSource;
+  if (hasNamedSource) score += 12;
+  else feedback.push('No identifiable evidence source or institution');
+  if (hasConcreteDetail) score += 10;
+  else feedback.push('No concrete number, date, or measured example');
+  if (hasAttributedQuote) score += 8;
+  else feedback.push('No short, attributed quotation');
+
+  // 4. Natural language (10pts)
+  const aiPhrases = [
+    /the ripple effect is/i,
+    /the question isn'?t whether/i,
+    /this isn'?t just about/i,
+    /let that sink in/i,
+    /game[- ]changer/i,
+    /in an era where/i,
+    /the future is (?:already )?here/i,
   ];
-  const sciHits = sciTerms.filter(r => r.test(post)).length;
-  score += Math.min(10, sciHits * 4);
-  if (sciHits < 2) feedback.push('Lacks scientific specificity or concrete numbers');
+  const aiPhraseHits = aiPhrases.filter(pattern => pattern.test(post)).length;
+  if (aiPhraseHits === 0) score += 10;
+  else feedback.push('Contains formulaic AI-style phrasing');
 
-  // 6. Ending presence (10pts)
+  // 5. Deliberate ending (10pts)
   const lastPara = (paragraphs[paragraphs.length - 1] || '').trim();
-  const hasProperEnding = /[.!?]\s*$/.test(lastPara);
-  score += hasProperEnding ? 10 : 3;
-  if (!hasProperEnding) feedback.push('Post ends abruptly - needs a deliberate closing line');
+  const hasProperEnding = /[.]\s*$/.test(lastPara) && !/\?/.test(lastPara);
+  if (hasProperEnding && lastPara.split(/\s+/).length <= 32) score += 10;
+  else feedback.push('Ending should be a short statement, not a question or CTA');
 
-  return { score, passed: score >= 60, feedback };
+  return { score, passed: score >= 72, feedback };
 }
 
 // ─── User prompt builder ─────────────────────────────────────────────────────
@@ -145,8 +119,8 @@ function buildUserPrompt(topic, pillar, tone, attempt = 1) {
 
   const escalations = [
     '',
-    '\n\nIMPORTANT: The previous draft sounded too polished. Replace abstractions with one concrete observation and use plainer words.',
-    '\n\nIMPORTANT: The previous draft still sounded templated. Remove dramatic phrasing, lists, emojis, and slogans. Write as a person explaining one useful implication to peers.',
+    '\n\nIMPORTANT: The previous draft missed the format. Cut it to 110-190 words, shorten every paragraph, and add one named evidence source with a measured detail.',
+    '\n\nIMPORTANT: The previous draft still failed editorial review. Remove every generic transition and unsupported claim. Include one reliable, attributed source; add a short exact quote only if you are certain of its wording.',
   ];
   const escalation = escalations[Math.min(attempt - 1, escalations.length - 1)];
 
@@ -159,13 +133,15 @@ Write a complete LinkedIn post on this topic.
 The post must:
 - Use a calm, plain-spoken, fact-led LinkedIn voice. Do not imitate any individual writer or reuse their phrasing.
 - Start with a clear observation, claim, or surprising fact about the topic. No grand statement about humanity, no rhetorical question, and no dramatic hook formula.
-- Develop one argument through 5-8 short paragraphs. Each paragraph should add a fact, consequence, contrast, or grounded observation.
-- Use a specific number, timeframe, or named source only when it is genuinely known from the topic. Never invent data, research, quotes, clinical cases, or personal experience.
-- Include one concise line that naturally crystallizes the argument, but never write a slogan just to be screenshot-worthy.
+- Develop one argument through 5-8 short paragraphs. Keep every paragraph below 43 words.
+- Anchor the post in one identifiable source or real example. Name the institution, report, study, journal, or organization and include one measured detail such as a date, percentage, count, or timeframe.
+- Prefer one short, attributed quotation from that source. Use quotation marks only when you are confident the wording is exact. Otherwise clearly attribute a concise paraphrase instead.
+- Never invent or loosely reconstruct data, research, quotations, clinical cases, URLs, citations, or personal experience. If a fact cannot be stated reliably, omit it.
+- Include one concise line that naturally crystallizes the argument, without turning it into a slogan.
 - End with the practical implication or an unresolved, thoughtful observation. Do not force a CTA.
 - Use no emojis, decorative symbols, bullet lists, headings, or markdown. Avoid em-dashes and buzzwords.
 - Be readable on mobile: plain sentences, whitespace between paragraphs, and no giant blocks.
-- Be between 160 and 280 words total.
+- Be between 110 and 190 words total. Shorter is better when the point is complete.
 - ${ending.instruction}${escalation}`;
 }
 
@@ -178,7 +154,7 @@ async function callOpenRouter(messages, modelIndex = 0) {
 
   const response = await axios.post(
     OPENROUTER_API,
-    { model, messages, max_tokens: 600, temperature: 0.85 },
+    { model, messages, max_tokens: 420, temperature: 0.65 },
     {
       headers: {
         Authorization: `Bearer ${apiKey}`,

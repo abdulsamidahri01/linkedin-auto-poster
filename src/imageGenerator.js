@@ -9,6 +9,7 @@
 'use strict';
 
 const { execFile, execFileSync } = require('child_process');
+const crypto = require('crypto');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
@@ -38,17 +39,52 @@ function checkPythonAvailable() {
 
 // ─── Generate image ───────────────────────────────────────────────────────────
 
+const VISUAL_DIRECTIONS = [
+  {
+    name: 'fieldwork',
+    instruction: 'Show an on-location field investigation: sampling, monitoring, or infrastructure inspection in a real outdoor setting. Use a wide environmental frame, textured terrain or water, and a subject placed off-centre.',
+  },
+  {
+    name: 'clinical-workflow',
+    instruction: 'Show a real clinical workflow in context: hands in action, a care setting, and the surrounding process rather than a product portrait. Use an eye-level documentary frame with depth and controlled movement.',
+  },
+  {
+    name: 'laboratory-process',
+    instruction: 'Show one laboratory process mid-action: gloved hands, specimen handling, or an analysis step. Use a tight documentary crop and make the process—not a machine—the focal point.',
+  },
+  {
+    name: 'public-infrastructure',
+    instruction: 'Show the physical infrastructure behind the topic: a clinic pathway, water treatment system, public-health workspace, laboratory network room, or community setting. Use a broad architectural or environmental composition.',
+  },
+  {
+    name: 'biology-closeup',
+    instruction: 'Show a tactile, close observational view of the biology or material involved: culture media, a specimen, water sample, plant root zone, diagnostic consumable, or surface texture. Use macro or near-macro photography and shallow depth of field.',
+  },
+  {
+    name: 'people-at-work',
+    instruction: 'Show professionals collaborating naturally around a real task, seen from the side or behind. Focus on work, tools, and context—not faces or a posed team portrait.',
+  },
+];
+
+function selectVisualDirection(pillar, topic, postContent) {
+  const seed = `${pillar}|${topic}|${String(postContent || '').slice(0, 240)}`;
+  const index = crypto.createHash('sha256').update(seed).digest()[0] % VISUAL_DIRECTIONS.length;
+  return VISUAL_DIRECTIONS[index];
+}
+
 function openAiImagePrompt(pillar, topic, postContent) {
   const contentContext = String(postContent || '').slice(0, 1200);
+  const direction = selectVisualDirection(pillar, topic, postContent);
   return [
     'Create a restrained editorial visual for a science and research LinkedIn post.',
     `Content pillar: ${pillar}.`,
     `Post topic: ${topic}.`,
     contentContext ? `Post context: ${contentContext}` : '',
     'Choose exactly one concrete subject, setting, or process from the post and make it the whole image.',
-    'Use an understated magazine-editorial treatment: realistic laboratory, field, clinical, or infrastructure detail;',
-    'natural materials and lighting; muted ink, stone, and one restrained teal accent; generous negative space.',
+    `This post's assigned visual direction is ${direction.name}: ${direction.instruction}`,
+    'Use an understated magazine-editorial treatment with realistic detail, natural light, and restrained colour.',
     'The image should feel observed and specific, not futuristic or decorative.',
+    'Do not default to centred equipment, a marble or stone slab, a laboratory bench beside a window, or the same camera angle used for another post.',
     'Never use a globe, planet Earth, holograms, neon circuitry, floating particles, molecular swirls,',
     'generic digital networks, split-screen collages, or a futuristic city unless the post explicitly requires it.',
     'Do not include people posed for camera, logos, watermarks, readable text, invented charts, or medical claims.',

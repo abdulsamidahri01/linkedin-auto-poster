@@ -16,7 +16,7 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-const VERSION = '2.4.0'; // Concise, evidence-anchored posts + restrained OpenAI visuals
+const VERSION = '2.5.0'; // Evidence-anchored posts + rotating editorial image directions
 
 // ── Startup checks ────────────────────────────────────────────────────────────
 

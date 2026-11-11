@@ -143,7 +143,7 @@ ${source ? [
   'Publication year: ' + source.year,
   'DOI: ' + source.doi,
   'Abstract: ' + source.abstract,
-].join('\\n') : 'No evidence source supplied; do not generate factual claims.'}
+].join('\n') : 'No evidence source supplied; do not generate factual claims.'}
 
 Write a complete LinkedIn post on this topic. Base its factual assertions on the evidence record, not on your recalled knowledge.
 
@@ -227,7 +227,7 @@ async function generatePost(topicData, options = {}) {
       if (passed && safetyIssues.length === 0) {
         console.log(`[generator] Approved (score: ${score}/100)`);
         return {
-          content: content + '\\n\\nSource: ' + evidence.title + ' (' + evidence.year + '), ' + evidence.url,
+          content: content + '\n\nSource: ' + evidence.title + ' (' + evidence.year + '), ' + evidence.url,
           score, model, attempt, endingType,
           evidence: { title: evidence.title, doi: evidence.doi, url: evidence.url, year: evidence.year },
         };

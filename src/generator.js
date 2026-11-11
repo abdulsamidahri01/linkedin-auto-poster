@@ -82,13 +82,13 @@ function viralityScore(post) {
   // 3. Evidence anchor (30pts)
   const hasNamedSource = /\b(according to|reported by|published by|a study in|a report from|data from|WHO|CDC|NIH|NHS|Lancet|Nature|Science|BMJ|JAMA|UNICEF|World Bank)\b/i.test(post);
   const hasConcreteDetail = /\b\d{4}\b|\b\d+(?:\.\d+)?%\b|\b\d+(?:\.\d+)?\s*(?:million|billion|hour|day|week|year|month|patient|sample|test|case|country|hospital)s?\b/i.test(post);
-  const hasAttributedQuote = /[“"][^”"]{12,180}[”"]/u.test(post) && hasNamedSource;
+  const hasResearchContext = /\b(?:results?|methods?|limitations?|cohort|study|trial|review|analysis|sample|data)\b/i.test(post);
   if (hasNamedSource) score += 12;
   else feedback.push('No identifiable evidence source or institution');
   if (hasConcreteDetail) score += 10;
   else feedback.push('No concrete number, date, or measured example');
-  if (hasAttributedQuote) score += 8;
-  else feedback.push('No short, attributed quotation');
+  if (hasResearchContext) score += 8;
+  else feedback.push('No research context or limitations language');
 
   // 4. Natural language (10pts)
   const aiPhrases = [
@@ -111,9 +111,8 @@ function viralityScore(post) {
   else feedback.push('Ending should be a short statement, not a question or CTA');
 
   // A polished but unsourced draft must never pass editorial review. The
-  // quotation remains optional because an inaccurate quote is worse than a
-  // clearly attributed paraphrase, but a named source plus concrete detail is
-  // mandatory for every published post.
+  // a named source plus a concrete date/number is mandatory for every post.
+  // This writing score is NOT a substitute for source validation.
   const hasEvidenceAnchor = hasNamedSource && hasConcreteDetail;
   if (!hasEvidenceAnchor) feedback.push('Evidence anchor is mandatory for publication');
 
@@ -127,8 +126,8 @@ function buildUserPrompt(topic, pillar, tone, attempt = 1, source = null) {
 
   const escalations = [
     '',
-    '\n\nIMPORTANT: The previous draft missed the format. Cut it to 110-190 words, shorten every paragraph, and add one named evidence source with a measured detail.',
-    '\n\nIMPORTANT: The previous draft still failed editorial review. Remove every generic transition and unsupported claim. Include one reliable, attributed source; add a short exact quote only if you are certain of its wording.',
+    '\n\nIMPORTANT: The previous draft missed the format. Cut it to 110-190 words, shorten every paragraph, and name the supplied source and year without adding any number absent from it.',
+    '\n\nIMPORTANT: The previous draft still failed editorial review. Remove every generic transition and unsupported claim. Paraphrase only the supplied abstract; do not quote, add links, or invent statistics.',
   ];
   const escalation = escalations[Math.min(attempt - 1, escalations.length - 1)];
 
@@ -200,7 +199,6 @@ async function generatePost(topicData, options = {}) {
   console.log(`[generator] Pillar: ${pillar} | Tone: ${tone}`);
   console.log(`[generator] Ending type today: ${endingType}`);
 
-  let lastContent = null;
   let lastScore = null;
   let modelIndex = 0;
 
@@ -221,7 +219,6 @@ async function generatePost(topicData, options = {}) {
       console.log(`[generator] V4 score: ${score}/100 | passed: ${passed}`);
       feedback.forEach(f => console.log(`[generator]   x ${f}`));
 
-      lastContent = content;
       lastScore = score;
 
       if (passed && safetyIssues.length === 0) {

@@ -18,7 +18,7 @@ const { selectTopic, recordTopicUsed } = require('./topics');
 const { generatePost } = require('./generator');
 const { publishPost, publishImagePost, uploadImage } = require('./linkedin');
 const { generateImage } = require('./imageGenerator');
-const { logPost } = require('./logger');
+const { logPost, loadLog } = require('./logger');
 
 const CRON_EXPRESSION = '0 5 * * *';
 let isRunning = false;
@@ -40,6 +40,16 @@ async function runDailyJob(jobId) {
   let result;
 
   try {
+    // Prevent accidental duplicate posts per PKT calendar day. Requires a
+    // persistent DATA_DIR on Railway and a single running scheduler replica.
+    const pktDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
+    const postedToday = loadLog().some(post =>
+      new Date(post.date).toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' }) === pktDate
+    );
+    if (postedToday) {
+      console.log('[scheduler] Already published today in PKT; skipping');
+      return { skipped: true, reason: 'already_posted_today' };
+    }
     // 1. Select topic
     const topicData = selectTopic();
     console.log(`[scheduler] Pillar: ${topicData.pillar}`);
@@ -84,6 +94,7 @@ async function runDailyJob(jobId) {
       urn: published.urn,
       url: published.url,
       warning: generated.warning,
+      evidence: generated.evidence,
       hasImage,
     });
 

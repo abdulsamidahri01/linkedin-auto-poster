@@ -100,4 +100,8 @@ function getInsights() {
   })).sort((a,b) => b.impressions - a.impressions);
 }
 
-module.exports = { logPost, recentTopics, loadLog, savePostMetrics, getInsights };
+function getRecentPosts(limit = 7) {
+  return loadLog().slice(-Math.max(0, Math.min(100, Number(limit) || 7))).reverse();
+}
+
+module.exports = { logPost, recentTopics, loadLog, getRecentPosts, savePostMetrics, getInsights };

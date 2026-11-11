@@ -7,6 +7,7 @@
 
 const axios = require('axios');
 const { SYSTEM_PROMPT } = require('./systemPrompt');
+const { findEvidence, validateDraft } = require('./evidence');
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -121,7 +122,7 @@ function viralityScore(post) {
 
 // ─── User prompt builder ─────────────────────────────────────────────────────
 
-function buildUserPrompt(topic, pillar, tone, attempt = 1) {
+function buildUserPrompt(topic, pillar, tone, attempt = 1, source = null) {
   const ending = selectEndingType();
 
   const escalations = [
@@ -135,15 +136,24 @@ function buildUserPrompt(topic, pillar, tone, attempt = 1) {
 Emotional tone: ${tone}
 Topic: ${topic}
 
-Write a complete LinkedIn post on this topic.
+EVIDENCE RECORD (retrieved from Europe PMC; use ONLY this as your factual anchor):
+${source ? [
+  'Title: ' + source.title,
+  'Journal: ' + source.journal,
+  'Publication year: ' + source.year,
+  'DOI: ' + source.doi,
+  'Abstract: ' + source.abstract,
+].join('\\n') : 'No evidence source supplied; do not generate factual claims.'}
+
+Write a complete LinkedIn post on this topic. Base its factual assertions on the evidence record, not on your recalled knowledge.
 
 The post must:
 - Use a calm, plain-spoken, fact-led LinkedIn voice. Do not imitate any individual writer or reuse their phrasing.
 - Start with a clear observation, claim, or surprising fact about the topic. No grand statement about humanity, no rhetorical question, and no dramatic hook formula.
 - Develop one argument through 5-8 short paragraphs. Keep every paragraph below 43 words.
-- Anchor the post in one identifiable source or real example. Name the institution, report, study, journal, or organization and include one measured detail such as a date, percentage, count, or timeframe.
-- Prefer one short, attributed quotation from that source. Use quotation marks only when you are confident the wording is exact. Otherwise clearly attribute a concise paraphrase instead.
-- Never invent or loosely reconstruct data, research, quotations, clinical cases, URLs, citations, or personal experience. If a fact cannot be stated reliably, omit it.
+- Name the source journal or paper in the body and cite its publication year. Use only numbers that occur in the supplied evidence record. Do not manufacture percentages, counts, dates, quotes, or interpretations.
+- Paraphrase the supplied abstract carefully; do not use direct quotations or introduce a second unverified study.
+- Never write in first person (I, my, we, our), invent personal experience, or place URLs in the generated text. The application adds the source DOI link after validation.
 - Include one concise line that naturally crystallizes the argument, without turning it into a slogan.
 - End with the practical implication or an unresolved, thoughtful observation. Do not force a CTA.
 - Use no emojis, decorative symbols, bullet lists, headings, or markdown. Avoid em-dashes and buzzwords.
@@ -180,9 +190,11 @@ async function callOpenRouter(messages, modelIndex = 0) {
 
 // ─── Main generator ──────────────────────────────────────────────────────────
 
-async function generatePost(topicData) {
+async function generatePost(topicData, options = {}) {
   const { topic, pillar, tone } = topicData;
   const endingType = selectEndingType().type;
+  // Evidence retrieval is mandatory: no source means no automatic post.
+  const evidence = await (options.findEvidence || findEvidence)(topic, pillar);
 
   console.log(`[generator] Topic: "${topic}"`);
   console.log(`[generator] Pillar: ${pillar} | Tone: ${tone}`);
@@ -197,12 +209,14 @@ async function generatePost(topicData) {
     try {
       const messages = [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(topic, pillar, tone, attempt) },
+        { role: 'user', content: buildUserPrompt(topic, pillar, tone, attempt, evidence) },
       ];
 
       const { content: raw, model } = await callOpenRouter(messages, modelIndex);
       const content = polishContent(raw);
       const { score, passed, feedback } = viralityScore(content);
+      const safetyIssues = validateDraft(content, evidence);
+      feedback.push(...safetyIssues);
 
       console.log(`[generator] V4 score: ${score}/100 | passed: ${passed}`);
       feedback.forEach(f => console.log(`[generator]   x ${f}`));
@@ -210,9 +224,13 @@ async function generatePost(topicData) {
       lastContent = content;
       lastScore = score;
 
-      if (passed) {
+      if (passed && safetyIssues.length === 0) {
         console.log(`[generator] Approved (score: ${score}/100)`);
-        return { content, score, model, attempt, endingType };
+        return {
+          content: content + '\\n\\nSource: ' + evidence.title + ' (' + evidence.year + '), ' + evidence.url,
+          score, model, attempt, endingType,
+          evidence: { title: evidence.title, doi: evidence.doi, url: evidence.url, year: evidence.year },
+        };
       }
 
       if (attempt === MAX_ATTEMPTS - 1 && modelIndex < MODELS.length - 1) {
@@ -225,15 +243,9 @@ async function generatePost(topicData) {
     }
   }
 
-  console.warn(`[generator] Shipping best content (score: ${lastScore}/100)`);
-  return {
-    content: lastContent,
-    score: lastScore,
-    model: MODELS[modelIndex],
-    attempt: MAX_ATTEMPTS,
-    endingType,
-    warning: 'Below threshold - shipped after max retries',
-  };
+  // Fail closed: never publish a draft that failed editorial or source checks.
+  throw new Error('Automatic post rejected after ' + MAX_ATTEMPTS
+    + ' attempts (last score: ' + lastScore + '). No post published.');
 }
 
 module.exports = { generatePost, viralityScore, buildUserPrompt, polishContent };

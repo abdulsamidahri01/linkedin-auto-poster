@@ -36,11 +36,13 @@ function searchQueries(topic, pillar) {
   if (terms.length >= 3) queries.push(terms.slice(0, 3).join(' AND '));
   if (terms.length >= 2) queries.push(terms.slice(0, 2).join(' AND '));
   if (PILLAR_QUERIES[pillar]) queries.push(PILLAR_QUERIES[pillar]);
-  return [...new Set(queries)].map(q => '(' + q + ') AND HAS_ABSTRACT:y');
+  return [...new Set(queries)].map(q => '(' + q + ') AND HAS_ABSTRACT:y AND SRC:MED');
 }
 
 function extractRecord(record) {
   if (!record || !record.doi || !record.title || !record.abstractText) return null;
+  // Limit automated citations to PubMed-indexed records, excluding preprints.
+  if (record.source !== 'MED') return null;
   const doi = String(record.doi).trim().replace(/^https?:\/\/doi\.org\//i, '');
   if (!/^10\.\d{4,9}\/[\w.;()/:+-]+$/i.test(doi)) return null;
   const abstract = String(record.abstractText)

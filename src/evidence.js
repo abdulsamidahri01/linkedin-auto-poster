@@ -33,6 +33,12 @@ function tokens(value) {
 function searchQueries(topic, pillar) {
   const terms = tokens(topic);
   const queries = [];
+  if (/\b(?:phd|doctoral|doctorate)\b/i.test(topic)) {
+    queries.push('(PhD OR doctoral OR doctorate OR postgraduate) AND (training OR education OR skills OR career)');
+  }
+  if (/\b(?:academia|academic|researchers?)\b/i.test(topic) && /\b(?:leaving|burnout|career|careers)\b/i.test(topic)) {
+    queries.push('(researcher OR academic OR scientist) AND (career OR retention OR burnout OR attrition)');
+  }
   if (terms.length >= 3) queries.push(terms.slice(0, 3).join(' AND '));
   if (terms.length >= 2) queries.push(terms.slice(0, 2).join(' AND '));
   if (PILLAR_QUERIES[pillar]) queries.push(PILLAR_QUERIES[pillar]);
@@ -63,6 +69,9 @@ function extractRecord(record) {
 
 function pickEvidence(records, topic, pillar) {
   const topicTerms = tokens(topic);
+  if (/\b(?:phd|doctoral|doctorate)\b/i.test(topic)) {
+    topicTerms.push('doctoral', 'doctorate', 'postgraduate', 'training', 'education', 'skills', 'career');
+  }
   const fallbackTerms = tokens(PILLAR_QUERIES[pillar] || '');
   const ranked = (records || []).map(extractRecord).filter(Boolean).map(source => {
     const articleWords = new Set(tokens(source.title + ' ' + source.abstract));
@@ -80,7 +89,7 @@ async function findEvidence(topic, pillar, http = axios) {
   for (const query of searchQueries(topic, pillar)) {
     try {
       const response = await http.get(EUROPE_PMC, {
-        params: { query, format: 'json', resultType: 'core', pageSize: 10 },
+        params: { query, format: 'json', resultType: 'core', pageSize: 25 },
         timeout: 12000,
       });
       const source = pickEvidence(response.data?.resultList?.result, topic, pillar);

@@ -49,7 +49,7 @@ function selectEndingType() {
 
 // ─── V4 Virality Filter ──────────────────────────────────────────────────────
 
-function viralityScore(post) {
+function viralityScore(post, source = null) {
   const lines = post.split('\n').map(l => l.trim()).filter(Boolean);
   const words = post.trim().split(/\s+/);
   const paragraphs = post.split(/\n\n+/).filter(p => p.trim());
@@ -75,7 +75,13 @@ function viralityScore(post) {
   else feedback.push('One or more paragraphs are too dense');
 
   // 3. Evidence anchor (30pts)
-  const hasNamedSource = /\b(according to|reported by|published by|a study in|a report from|data from|WHO|CDC|NIH|NHS|Lancet|Nature|Science|BMJ|JAMA|UNICEF|World Bank)\b/i.test(post);
+  const normalizeSource = value => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const normalizedPost = normalizeSource(post);
+  const matchesRetrievedSource = source && [source.journal, source.title].some(name => {
+    const normalized = normalizeSource(name);
+    return normalized.length >= 6 && normalized !== 'peer reviewed literature' && normalizedPost.includes(normalized);
+  });
+  const hasNamedSource = source ? Boolean(matchesRetrievedSource) : /\b(according to|reported by|published by|a study in|a report from|data from|WHO|CDC|NIH|NHS|Lancet|Nature|Science|BMJ|JAMA|UNICEF|World Bank)\b/i.test(post);
   const hasConcreteDetail = /\b\d{4}\b|\b\d+(?:\.\d+)?%\b|\b\d+(?:\.\d+)?\s*(?:million|billion|hour|day|week|year|month|patient|sample|test|case|country|hospital)s?\b/i.test(post);
   const hasResearchContext = /\b(?:results?|methods?|limitations?|cohort|study|trial|review|analysis|sample|data)\b/i.test(post);
   if (hasNamedSource) score += 12;
@@ -164,7 +170,7 @@ async function callOpenRouter(messages, model) {
 
   const response = await axios.post(
     OPENROUTER_API,
-    { model, messages, max_tokens: 420, temperature: 0.65 },
+    { model, messages, max_tokens: 1000, temperature: 0.35 },
     {
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -195,6 +201,8 @@ async function generatePost(topicData, options = {}) {
   console.log(`[generator] Ending type today: ${endingType}`);
 
   let lastScore = null;
+  let previousDraft = null;
+  let previousFeedback = [];
   let modelIndex = 0;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -205,11 +213,22 @@ async function generatePost(topicData, options = {}) {
         { role: 'user', content: buildUserPrompt(topic, pillar, tone, attempt, evidence) },
       ];
 
+      if (previousDraft) {
+        messages.push({ role: 'assistant', content: previousDraft });
+        messages.push({ role: 'user', content: 'Rewrite the draft to fix ALL of these validation failures: '
+          + previousFeedback.join('; ')
+          + '. Use third-person prose only, with no I, me, my, we, our, or us. Name this exact source journal or paper: '
+          + (evidence.journal || evidence.title) + ', and cite ' + evidence.year
+          + '. Use 5-8 short paragraphs, 110-190 words, and end with a short complete statement. Preserve the source limitations; do not invent experience or facts.' });
+      }
+
       const { content: raw, model } = await callOpenRouter(messages, models[modelIndex]);
       const content = polishContent(raw);
-      const { score, passed, feedback } = viralityScore(content);
+      const { score, passed, feedback } = viralityScore(content, evidence);
       const safetyIssues = validateDraft(content, evidence);
       feedback.push(...safetyIssues);
+      previousDraft = content;
+      previousFeedback = [...feedback];
 
       console.log(`[generator] V4 score: ${score}/100 | passed: ${passed}`);
       feedback.forEach(f => console.log(`[generator]   x ${f}`));

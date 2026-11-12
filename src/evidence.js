@@ -98,7 +98,7 @@ function validateDraft(content, source) {
   if (!source || !source.doi || !source.abstract) {
     return ['No verified article metadata and abstract supplied'];
   }
-  if (/\b(?:I|I\x27ve|I\x27m|my|mine|we|our|ours|us)\b/i.test(content)) {
+  if (/\b(?:I|I\x27ve|I\x27m|me|my|mine|myself|we|our|ours|ourselves|us)\b/i.test(content)) {
     issues.push('First-person voice is prohibited without verified author experiences');
   }
   if (/https?:\/\//i.test(content)) issues.push('Model-generated links are prohibited; source link is added by the application');

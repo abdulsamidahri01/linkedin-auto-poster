@@ -119,11 +119,12 @@ function validateDraft(content, source) {
     issues.push('Attribution to the account owner is prohibited in automatic drafts');
   }
   if (/https?:\/\//i.test(content)) issues.push('Model-generated links are prohibited; source link is added by the application');
+  const normalizeNumbers = value => String(value).replace(/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g, n => n.replace(/,/g, ''));
   const availableNumbers = new Set(
-    (source.title + ' ' + source.abstract + ' ' + source.year)
+    normalizeNumbers(source.title + ' ' + source.abstract + ' ' + source.year)
       .match(/\b\d+(?:\.\d+)?\b/g) || []
   );
-  const usedNumbers = [...new Set(content.match(/\b\d+(?:\.\d+)?\b/g) || [])];
+  const usedNumbers = [...new Set(normalizeNumbers(content).match(/\b\d+(?:\.\d+)?\b/g) || [])];
   const unsupportedNumbers = usedNumbers.filter(n => !availableNumbers.has(n));
   if (unsupportedNumbers.length) {
     issues.push('Numeric claims absent from source abstract/metadata: ' + unsupportedNumbers.join(', '));

@@ -11,12 +11,7 @@ const { findEvidence, validateDraft } = require('./evidence');
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 
-const MODELS = [
-  'qwen/qwen3-235b-a22b',
-  'qwen/qwen3.6-plus',
-  'anthropic/claude-haiku-4-5',
-  'mistralai/mistral-7b-instruct',
-];
+const { getModels } = require('./modelConfig');
 
 const MAX_ATTEMPTS = 3;
 
@@ -163,8 +158,7 @@ The post must:
 
 // ─── OpenRouter call ─────────────────────────────────────────────────────────
 
-async function callOpenRouter(messages, modelIndex = 0) {
-  const model = MODELS[modelIndex];
+async function callOpenRouter(messages, model) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
 
@@ -192,6 +186,7 @@ async function callOpenRouter(messages, modelIndex = 0) {
 async function generatePost(topicData, options = {}) {
   const { topic, pillar, tone } = topicData;
   const endingType = selectEndingType().type;
+  const models = getModels();
   // Evidence retrieval is mandatory: no source means no automatic post.
   const evidence = await (options.findEvidence || findEvidence)(topic, pillar);
 
@@ -203,14 +198,14 @@ async function generatePost(topicData, options = {}) {
   let modelIndex = 0;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    console.log(`[generator] Attempt ${attempt}/${MAX_ATTEMPTS} - model: ${MODELS[modelIndex]}`);
+    console.log(`[generator] Attempt ${attempt}/${MAX_ATTEMPTS} - model: ${models[modelIndex]}`);
     try {
       const messages = [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: buildUserPrompt(topic, pillar, tone, attempt, evidence) },
       ];
 
-      const { content: raw, model } = await callOpenRouter(messages, modelIndex);
+      const { content: raw, model } = await callOpenRouter(messages, models[modelIndex]);
       const content = polishContent(raw);
       const { score, passed, feedback } = viralityScore(content);
       const safetyIssues = validateDraft(content, evidence);
@@ -230,13 +225,16 @@ async function generatePost(topicData, options = {}) {
         };
       }
 
-      if (attempt === MAX_ATTEMPTS - 1 && modelIndex < MODELS.length - 1) {
-        modelIndex++;
-        console.log(`[generator] Escalating to: ${MODELS[modelIndex]}`);
-      }
+      // Rejected drafts advance through the configured fallbacks too.
+      if (modelIndex < models.length - 1) modelIndex++;
     } catch (err) {
-      console.warn(`[generator] Attempt ${attempt} error: ${err.message}`);
-      if (modelIndex < MODELS.length - 1) modelIndex++;
+      const status = err.response?.status;
+      // Axios errors may include request credentials; log only a bounded status.
+      console.warn(`[generator] Attempt ${attempt} failed: ${status ? 'HTTP ' + status : 'model unavailable or empty response'}`);
+      if (status === 401 || status === 402 || status === 403) {
+        throw new Error('OpenRouter authorization/billing failure; generation stopped');
+      }
+      if (modelIndex < models.length - 1) modelIndex++;
     }
   }
 

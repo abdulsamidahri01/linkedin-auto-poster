@@ -1,13 +1,14 @@
 {
   "name": "linkedin-auto-poster",
-  "version": "2.1.0",
+  "version": "2.6.0",
   "description": "Daily automated LinkedIn posting — microbiology + AI thought leadership",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "build": "python3 -m pip install --only-binary=:all: --no-cache-dir --target /app/python-packages -r requirements.txt",
     "dev": "node --watch src/server.js",
-    "test": "node src/test.js"
+    "test": "node src/test.js",
+    "test:unit": "node --test tests/*.test.js"
   },
   "dependencies": {
     "axios": "^1.6.0",

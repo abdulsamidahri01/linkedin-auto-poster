@@ -16,9 +16,10 @@
 const cron = require('node-cron');
 const { selectTopic, recordTopicUsed } = require('./topics');
 const { generatePost } = require('./generator');
+const { checkLinkedInAuth } = require('./authHealth');
 const { publishPost, publishImagePost, uploadImage } = require('./linkedin');
 const { generateImage } = require('./imageGenerator');
-const { logPost } = require('./logger');
+const { logPost, loadLog } = require('./logger');
 
 const CRON_EXPRESSION = '0 5 * * *';
 let isRunning = false;
@@ -40,6 +41,20 @@ async function runDailyJob(jobId) {
   let result;
 
   try {
+    // Prevent accidental duplicate posts per PKT calendar day. Requires a
+    // persistent DATA_DIR on Railway and a single running scheduler replica.
+    const pktDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
+    const postedToday = loadLog().some(post =>
+      new Date(post.date).toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' }) === pktDate
+    );
+    if (postedToday) {
+      console.log('[scheduler] Already published today in PKT; skipping');
+      return { skipped: true, reason: 'already_posted_today' };
+    }
+    // Fail before paid text/image generation if the token cannot be checked.
+    await checkLinkedInAuth();
+    console.log('[scheduler] LinkedIn identity check passed (publishing scope not tested)');
+
     // 1. Select topic
     const topicData = selectTopic();
     console.log(`[scheduler] Pillar: ${topicData.pillar}`);
@@ -61,13 +76,19 @@ async function runDailyJob(jobId) {
       const imageUrn = await uploadImage(imagePath);
       console.log(`[scheduler] Image uploaded: ${imageUrn}`);
 
-      published = await publishImagePost(generated.content, imageUrn, topicData.hashtags);
       hasImage = true;
-      console.log('[scheduler] Published with image');
+      published = { imageUrn };
     } catch (imgErr) {
-      console.warn(`[scheduler] Image failed (${imgErr.message}) - falling back to text-only`);
+      // Only image preparation failed; no post has been submitted yet.
+      console.warn('[scheduler] Image preparation failed; using text-only');
+    }
+
+    // Publishing errors must escape to the job handler. Never publish a second
+    // text post after an uncertain image-post response.
+    if (hasImage) {
+      published = await publishImagePost(generated.content, published.imageUrn, topicData.hashtags);
+    } else {
       published = await publishPost(generated.content, topicData.hashtags);
-      console.log('[scheduler] Published text-only (image fallback)');
     }
 
     // 4. Record topic
@@ -84,6 +105,7 @@ async function runDailyJob(jobId) {
       urn: published.urn,
       url: published.url,
       warning: generated.warning,
+      evidence: generated.evidence,
       hasImage,
     });
 

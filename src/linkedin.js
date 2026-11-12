@@ -143,6 +143,11 @@ async function _doPublish(payload, accessToken) {
       const status = err.response?.status;
       const body = JSON.stringify(err.response?.data || {});
       console.warn(`[linkedin] Attempt ${attempt} failed - HTTP ${status}: ${body}`);
+      // A timeout/network error/5xx may follow an accepted post. Do not retry
+      // an ambiguous create operation; the owner must reconcile it first.
+      if (!status || status >= 500) {
+        throw new Error('LinkedIn publish outcome unknown; automatic retry stopped to avoid duplicates');
+      }
       if (status === 401 || status === 403) {
         throw new Error(`LinkedIn auth error (${status}). Check token and w_member_social scope. Raw: ${body}`);
       }

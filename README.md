@@ -1,157 +1,136 @@
-# LinkedIn Auto Poster v2.0
+# LinkedIn Auto Poster — safer evidence-first upgrade (v2.6)
 
-Daily automated LinkedIn posting for **Abdul Sami Dahri** — microbiology x AI thought leadership.
+Automatic daily LinkedIn content for Abdul Sami Dahri, focusing on microbiology, AI, research careers, public health, and biomedical systems. Runs on Railway.
 
-Posts once per day at **10:00 AM PKT (05:00 UTC)**, rotating through 7 content pillars aligned to a weekly editorial strategy.
+## What this upgrade changes
 
-**Live deployment:** https://satisfied-nurturing-production-f63b.up.railway.app
+- **Literature first:** Before drafting, the app searches Europe PMC for a DOI-bearing publication with a substantive abstract. It passes that record to the AI and attaches its DOI after drafting.
+- **Publication now fails closed:** If the research search fails, the model fails, or editorial/safety validation fails after three attempts, **nothing is posted**.
+- **No fictitious personal narratives:** The draft validator rejects first-person language and model-generated URLs. Numerals must be present in the retrieved abstract, paper title, or year.
+- **Manual analytics:** Import post metrics through a secret-protected endpoint and review per-pillar aggregated performance. This is **not yet automatic performance harvesting**.
+- **Operations:** Optional `DATA_DIR` for persistent Railway volume storage, atomic local JSON writes, duplicate-post protection within a PKT calendar day, a protected manual trigger, and unit tests.
 
----
+**Important limitation:** A bibliographic record and abstract establish that a paper exists, **not** that every generated inference or paraphrase is correct. These deterministic checks reduce obvious errors but do not replace scholarly review. Review the generated claims before enabling unattended publication for high-stakes topics.
 
-## How it works
+## Pipeline
 
+```text
+node-cron (05:00 UTC = 10:00 Pakistan time)
+  -> seven-pillar curated topic picker (30-day avoidance)
+  -> Europe PMC biomedical publication search and abstract retrieval
+  -> OpenRouter model generates 110–190-word draft
+  -> editorial score >= 72 AND named-source requirement
+  -> fabricated-first-person / unsupported-numeral / URL rejection
+  -> append validated article DOI URL
+  -> OpenAI Images API, or matplotlib image fallback
+  -> LinkedIn REST Posts API (text-only if images fail)
+  -> persistent publication log
+  -> manual metrics import -> aggregate /insights
 ```
-node-cron fires at 05:00 UTC (10:00 AM PKT) every day
-  -> selectTopic()    picks today's pillar + a fresh topic (not used in 30 days)
-  -> generatePost()   OpenRouter LLM + V4 virality scoring (0-100, pass at 60)
-  -> publishPost()    LinkedIn REST API /rest/posts
-  -> logPost()        records to data/post-log.json (gitignored)
-```
 
----
+Topics are selected from the curated pool, **not live trend research**. The score is a rule-based **editorial score**, not a validated virality predictor.
 
-## Weekly content pillars
+## Installation and checks
 
-| Day | Pillar | Emotional Tone |
-|-----|--------|----------------|
-| Monday | AI + Microbiology | Visionary, intellectually sharp |
-| Tuesday | Clinical Blind Spots | Tense, uncomfortable, critical |
-| Wednesday | Microbial Intelligence | Curious, philosophical |
-| Thursday | Academic / Research Reality | Honest, grounded, human |
-| Friday | Future Healthcare Systems | Strategic, predictive |
-| Saturday | Public Health + AMR | Serious, globally urgent |
-| Sunday | Reflective / Philosophical Science | Calm, introspective |
-
-10 curated topics per pillar. Topics rotate and do not repeat within 30 days.
-
----
-
-## V4 Virality Filter
-
-Every generated post is scored 0-100 before publishing. Pass threshold: **60/100**.
-
-| Criterion | Points | What it checks |
-|-----------|--------|----------------|
-| Hook quality | 25 | First 2 lines create tension or curiosity |
-| Repost sentence | 20 | One short, compressive, screenshot-worthy line |
-| Human voice | 20 | Friction, uncertainty, realism - not AI-smooth |
-| Mobile readability | 15 | Short lines, whitespace, 120-280 words |
-| Scientific credibility | 10 | Specific terms, not generic |
-| Ending quality | 10 | Not always a direct question |
-
-If all 3 attempts score below 60, the best draft ships with a warning in the log.
-
-**Why V4?** The previous V3 filter used 4 binary gates. If any single gate failed, the post was rejected - causing "max retries reached, shipping anyway" every day. V4's scored rubric fixes this.
-
----
-
-## Setup
-
-### 1. Install
 ```bash
 npm install
-```
-
-### 2. Configure
-```bash
 cp .env.example .env
-# Add your OPENROUTER_API_KEY and LINKEDIN_ACCESS_TOKEN
-```
-
-### 3. Test locally (no publish)
-```bash
-node src/test.js              # today's pillar
-node src/test.js --day 1      # Monday: AI + Microbiology
-node src/test.js --day 3      # Wednesday: Microbial Intelligence
-```
-
-### 4. Run
-```bash
+# Supply credentials through environment variables, not GitHub.
+npm run test:unit             # tests: no external services, no publishing
+npm test                      # live generation only; requires an OpenRouter API key
 npm start
 ```
 
----
+The app also includes `GET /health`, `GET /preview-topic`, `GET /status`, and `POST /score`.
 
-## API endpoints
+## Required environment variables
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Railway healthcheck |
-| `/status` | GET | Last 7 posts with scores and URLs |
-| `/preview-topic` | GET | See today's topic without posting |
-| `/trigger` | POST | Manually fire the daily post job |
-| `/score` | POST | Score any text through the V4 filter |
+| Variable | Function |
+|---|---|
+| `OPENROUTER_API_KEY` | AI writing models |
+| `LINKEDIN_ACCESS_TOKEN` | LinkedIn OAuth token with `w_member_social` |
+| `LINKEDIN_SUB` | Optional LinkedIn person ID |
+| `OPENAI_API_KEY` | Optional; enables OpenAI-generated post imagery |
+| `OPENAI_IMAGE_MODEL` | Optional, configured model name |
+| `TRIGGER_SECRET` | **Required** for authenticated `POST /trigger`; route is disabled without it |
+| `METRICS_SECRET` | **Required** for `POST /metrics` and `GET /insights` |
+| `DATA_DIR` | Optional absolute persistent data directory (for example, `/data`) |
+| `PORT` | Railway-provided port |
 
-### Examples
+Europe PMC currently requires no additional API key for the public search endpoint. The application must be allowed to access `www.ebi.ac.uk`.
+
+## Railway persistence
+
+Attach a Railway **persistent volume** to the running service, mount it at `/data`, and set `DATA_DIR=/data`. The app writes `post-log.json` and `topic-history.json` there. Keep the service to **one replica**: local JSON files and in-process cron locks are not distributed-safe.
+
+Without a persistent volume, the logs and deduplication history can be lost after a redeploy. **Back up any existing data before changing the mount**; deploying a new volume does not automatically migrate old files.
+
+Railway auto-deploys changes merged to `main`. Test on a separate environment before merging.
+
+## Authenticated metrics import
+
+The LinkedIn posting permission `w_member_social` **does not grant** post-performance read access. Official member post analytics require the separate `r_member_postAnalytics` scope and associated API access. This upgrade therefore provides a manual, permission-safe input path.
+
+A post must already be in the publication log. To import the metrics from its LinkedIn analytics screen:
 
 ```bash
-# Check status
-curl https://satisfied-nurturing-production-f63b.up.railway.app/status
-
-# Preview today's topic
-curl https://satisfied-nurturing-production-f63b.up.railway.app/preview-topic
-
-# Score a post manually
-curl -X POST https://satisfied-nurturing-production-f63b.up.railway.app/score \
+curl -X POST "$APP_URL/metrics" \
   -H "Content-Type: application/json" \
-  -d '{"content": "Your post text here..."}'
+  -H "x-admin-secret: $METRICS_SECRET" \
+  -d '{
+    "urn": "urn:li:share:REPLACE_WITH_POST_URN",
+    "metrics": {
+      "impressions": 17029,
+      "membersReached": 12410,
+      "reactions": 42,
+      "comments": 2,
+      "reposts": 4,
+      "saves": 3,
+      "sends": 1,
+      "profileVisits": 32,
+      "followersGained": 0
+    }
+  }'
+```
 
-# Manual trigger (if TRIGGER_SECRET is set)
-curl -X POST https://satisfied-nurturing-production-f63b.up.railway.app/trigger \
+For your own implementation, use the actual URN recorded in `GET /status`; the example values above are illustrative.
+
+```bash
+curl "$APP_URL/insights" -H "x-admin-secret: $METRICS_SECRET"
+```
+
+The returned figures represent **only posts for which metrics were supplied**. No automatic learning or forecasting is claimed.
+
+## Manual trigger
+
+```bash
+curl -X POST "$APP_URL/trigger" \
   -H "Content-Type: application/json" \
-  -d '{"secret": "your_secret_here"}'
+  -d '{"secret":"YOUR_TRIGGER_SECRET"}'
 ```
 
----
+If `TRIGGER_SECRET` is absent, the endpoint refuses requests. A post is also skipped when one was already logged on the current Pakistan calendar day.
 
-## Environment variables
+## Risks and operating limits
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OPENROUTER_API_KEY` | Yes | From https://openrouter.ai |
-| `LINKEDIN_ACCESS_TOKEN` | Yes | OAuth token (w_member_social + openid + profile) |
-| `LINKEDIN_SUB` | Optional | Your person ID (e.g. H-NTYYJGWD) - skips one API call per day |
-| `TRIGGER_SECRET` | Optional | Protects the /trigger endpoint |
-| `PORT` | Optional | Railway injects automatically |
+- Europe PMC abstracts can be missing, off-topic, or insufficient to justify interpretation. When no credible match is found, the daily post is skipped, by design.
+- The model may generate statements not fully justified by the abstract despite safeguards. Check samples before automatic release.
+- Up to three AI model calls and one or more Europe PMC searches may be made per daily post; monitor usage and request failures.
+- Do not publish fictional autobiographical experiments, grants, patients, or laboratories.
+- Automated analytics collection or active trend discovery are **future enhancements**, not features of this release.
+- Local files, in-process jobs, and process-level idempotency are suitable for one instance only. Upgrade to a transactional database and a distributed job lock before running multiple Railway replicas.
 
----
+## Core files
 
-## Project structure
-
+```text
+src/server.js          Express API routes, authenticated metrics/trigger
+src/scheduler.js       Daily publish orchestration and deduplication
+src/topics.js          Seven weekly editorial pillars, rotating topics
+src/evidence.js        Europe PMC lookup and deterministic draft checks
+src/generator.js       AI writing, source guidance, editorial scoring
+src/systemPrompt.js    Scientific writing instructions
+src/imageGenerator.js  OpenAI image generation, matplotlib fallback
+src/linkedin.js        Official LinkedIn REST API publisher
+src/logger.js          Publication log, imported performance aggregates
+tests/upgrade.test.js  Unit tests for safety, sources and metrics
 ```
-linkedin-auto-poster/
-├── src/
-│   ├── server.js        Express entry point + endpoints
-│   ├── scheduler.js     node-cron daily job runner
-│   ├── generator.js     OpenRouter content generation + V4 virality filter
-│   ├── linkedin.js      LinkedIn REST API publisher
-│   ├── topics.js        Day-aware topic selector (V6)
-│   ├── logger.js        Post history logger
-│   ├── systemPrompt.js  Master scientific media strategy prompt
-│   └── test.js          Local test runner (no publish)
-├── data/                Auto-created at runtime, gitignored
-│   ├── post-log.json
-│   └── topic-history.json
-├── .env.example
-├── .gitignore
-├── package.json
-└── README.md
-```
-
----
-
-## Deployment
-
-Railway auto-deploys on every push to main.
-
-Make sure the service is set to **Always On** in Railway settings so the cron fires daily without the service sleeping.

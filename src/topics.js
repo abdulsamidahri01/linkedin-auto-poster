@@ -8,7 +8,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const HISTORY_FILE = path.join(__dirname, '..', 'data', 'topic-history.json');
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..', 'data');
+const HISTORY_FILE = path.join(DATA_DIR, 'topic-history.json');
 
 const WEEKLY_PILLARS = {
   0: { // Sunday
@@ -39,7 +40,7 @@ const WEEKLY_PILLARS = {
       'The gap between what sequencing detects and what hospitals act on',
       'Predictive resistance modeling is here. Procurement systems are not',
       'How AI is quietly rewriting the rulebook on culture-based diagnostics',
-      'The lab of 2030 will not look like the lab of today',
+      'How laboratory workflows may change over the next decade',
       'Why the best diagnostic AI tools are failing in the worst hospitals',
       'Smart microbiology is not a technology problem. It is a trust problem',
       'When the algorithm is more current than the antibiogram',
@@ -84,13 +85,13 @@ const WEEKLY_PILLARS = {
     goal: 'Humanize the account',
     tone: 'honest, grounded, reflective, emotionally believable',
     topics: [
-      'The experiment that failed for six months and what it actually taught me',
+      'What repeated failed experiments reveal about the research process',
       'Publication pressure and the quiet erosion of scientific honesty',
       'What a PhD teaches you that has nothing to do with your thesis',
       'The lab reality nobody puts in the methods section',
       'Burnout in research is a systemic failure, not a personal one',
       'The gap between what the paper claims and what the lab experienced',
-      'Why I almost left research - and what made me stay',
+      'Why researchers consider leaving academia and what keeps them engaged',
       'Scientific uncertainty as a daily professional experience, not a philosophical abstraction',
       'The social dynamics of a research lab that no one publishes about',
       'What happens to your confidence when three consecutive experiments fail',
@@ -101,7 +102,7 @@ const WEEKLY_PILLARS = {
     goal: 'Establish systems-thinking authority',
     tone: 'strategic, visionary, predictive',
     topics: [
-      'The hospital of 2035 will diagnose before the patient feels sick',
+      'Evidence and limitations of predicting disease before symptoms appear',
       'Decentralized diagnostics and why central labs are not ready for what comes next',
       'Wastewater sequencing as the early warning system no government has fully funded',
       'The infrastructure gap between AI-ready data and AI-ready institutions',
@@ -152,7 +153,9 @@ function loadHistory() {
 function saveHistory(history) {
   const dir = path.dirname(HISTORY_FILE);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(-60), null, 2));
+  const temp = HISTORY_FILE + '.' + process.pid + '.tmp';
+  fs.writeFileSync(temp, JSON.stringify(history.slice(-60), null, 2));
+  fs.renameSync(temp, HISTORY_FILE);
 }
 
 function getRecentTopics(history, days = 30) {

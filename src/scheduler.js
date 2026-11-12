@@ -16,6 +16,7 @@
 const cron = require('node-cron');
 const { selectTopic, recordTopicUsed } = require('./topics');
 const { generatePost } = require('./generator');
+const { checkLinkedInAuth } = require('./authHealth');
 const { publishPost, publishImagePost, uploadImage } = require('./linkedin');
 const { generateImage } = require('./imageGenerator');
 const { logPost, loadLog } = require('./logger');
@@ -50,6 +51,10 @@ async function runDailyJob(jobId) {
       console.log('[scheduler] Already published today in PKT; skipping');
       return { skipped: true, reason: 'already_posted_today' };
     }
+    // Fail before paid text/image generation if the token cannot be checked.
+    await checkLinkedInAuth();
+    console.log('[scheduler] LinkedIn identity check passed (publishing scope not tested)');
+
     // 1. Select topic
     const topicData = selectTopic();
     console.log(`[scheduler] Pillar: ${topicData.pillar}`);
@@ -71,13 +76,19 @@ async function runDailyJob(jobId) {
       const imageUrn = await uploadImage(imagePath);
       console.log(`[scheduler] Image uploaded: ${imageUrn}`);
 
-      published = await publishImagePost(generated.content, imageUrn, topicData.hashtags);
       hasImage = true;
-      console.log('[scheduler] Published with image');
+      published = { imageUrn };
     } catch (imgErr) {
-      console.warn(`[scheduler] Image failed (${imgErr.message}) - falling back to text-only`);
+      // Only image preparation failed; no post has been submitted yet.
+      console.warn('[scheduler] Image preparation failed; using text-only');
+    }
+
+    // Publishing errors must escape to the job handler. Never publish a second
+    // text post after an uncertain image-post response.
+    if (hasImage) {
+      published = await publishImagePost(generated.content, published.imageUrn, topicData.hashtags);
+    } else {
       published = await publishPost(generated.content, topicData.hashtags);
-      console.log('[scheduler] Published text-only (image fallback)');
     }
 
     // 4. Record topic

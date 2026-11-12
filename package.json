@@ -1,6 +1,6 @@
 {
   "name": "linkedin-auto-poster",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "Daily automated LinkedIn posting — microbiology + AI thought leadership",
   "main": "src/server.js",
   "scripts": {
@@ -20,3 +20,4 @@
     "node": ">=18.0.0"
   }
 }
+

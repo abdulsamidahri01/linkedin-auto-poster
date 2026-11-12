@@ -31,6 +31,7 @@ function harness(results) {
   const context = { module: { exports: {} }, process: { env }, console: { log() {}, warn() {} },
     require: name => {
       if (name === 'axios') return axios;
+      if (name === './claimReview') return { reviewClaims: async () => [] };
       if (name === './systemPrompt') return { SYSTEM_PROMPT: 'test' };
       if (name === './evidence') return { findEvidence: async () => evidence, validateDraft: () => [] };
       if (name === './modelConfig') return { getModels: () => getModels(env) };

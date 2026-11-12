@@ -50,7 +50,7 @@ function extractRecord(record) {
     .replace(/\s+/g, ' ').trim();
   if (abstract.length < 180) return null;
   const year = Number(record.pubYear);
-  if (!Number.isInteger(year) || year < 2000 || year > new Date().getUTCFullYear() + 1) return null;
+  if (!Number.isInteger(year) || year < 2000 || year > new Date().getUTCFullYear()) return null;
   return {
     title: String(record.title).replace(/<[^>]+>/g, '').trim(),
     journal: String(record.journalInfo?.journal?.title || record.journalTitle || 'Peer-reviewed literature'),
@@ -69,7 +69,7 @@ function pickEvidence(records, topic, pillar) {
     const overlap = topicTerms.filter(t => articleWords.has(t)).length;
     const fallbackOverlap = fallbackTerms.filter(t => articleWords.has(t)).length;
     return { source, overlap, fallbackOverlap };
-  }).filter(x => x.overlap >= 2 || x.fallbackOverlap >= 2);
+  }).filter(x => x.overlap >= 2 && (!/\bphd\b/i.test(topic) || /\b(?:phd|doctoral|doctorate|postgraduate)\b/i.test(x.source.title + ' ' + x.source.abstract)));
   ranked.sort((a,b) => (b.overlap - a.overlap) ||
     (b.fallbackOverlap - a.fallbackOverlap) || (b.source.year - a.source.year));
   return ranked[0]?.source || null;

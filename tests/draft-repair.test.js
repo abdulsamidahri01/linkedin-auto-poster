@@ -21,6 +21,7 @@ function loadGenerator(responses = []) {
     console: { log() {}, warn() {} }, require: name => {
       if (name === 'axios') return { post: async (url, payload) => { requests.push(payload); return { data: { choices: [{ message: { content: responses.shift() } }] } }; } };
       if (name === './systemPrompt') return { SYSTEM_PROMPT: 'Use source only; no personal stories.' };
+      if (name === './claimReview') return { reviewClaims: async () => [] };
       if (name === './modelConfig') return { getModels: () => ['test/model'] };
       if (name === './evidence') {
         const c = { module: { exports: {} }, require: () => ({}) };

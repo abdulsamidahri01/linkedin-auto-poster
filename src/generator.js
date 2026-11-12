@@ -11,6 +11,8 @@ const { findEvidence, validateDraft } = require('./evidence');
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 
+const { reviewClaims } = require('./claimReview');
+
 const { getModels } = require('./modelConfig');
 
 const MAX_ATTEMPTS = 3;
@@ -145,7 +147,7 @@ ${source ? [
   'Abstract: ' + source.abstract,
 ].join('\n') : 'No evidence source supplied; do not generate factual claims.'}
 
-Write a complete LinkedIn post on this topic. Base its factual assertions on the evidence record, not on your recalled knowledge.
+Write a complete LinkedIn post only if this evidence directly addresses the topic. Do not use a laboratory protocol to make claims about PhD training or career decisions. Every factual sentence must be supported by the abstract. Avoid universal or causal claims absent from the source; do not state what the authors did not discover. Base its factual assertions on the evidence record, not on your recalled knowledge.
 
 The post must:
 - Use a calm, plain-spoken, fact-led LinkedIn voice. Do not imitate any individual writer or reuse their phrasing.
@@ -226,6 +228,9 @@ async function generatePost(topicData, options = {}) {
       const content = polishContent(raw);
       const { score, passed, feedback } = viralityScore(content, evidence);
       const safetyIssues = validateDraft(content, evidence);
+      if (passed && safetyIssues.length === 0) {
+        safetyIssues.push(...await reviewClaims(content, evidence, topic, model));
+      }
       feedback.push(...safetyIssues);
       previousDraft = content;
       previousFeedback = [...feedback];

@@ -30,7 +30,24 @@ function tokens(value) {
     .filter(t => !STOP_WORDS.has(t));
 }
 
+
+// Semantic topic constraints supplement word overlap; never substitute a
+// laboratory/clinical methods paper for evidence about academic integrity.
+function isPublicationPressureTopic(topic) {
+  return /publication pressure|publish.or.perish/i.test(topic);
+}
+function matchesTopicContext(source, topic) {
+  if (!isPublicationPressureTopic(topic)) return true;
+  const text = source.title + ' ' + source.abstract;
+  const incentives = /publication pressure|publishing pressure|publish.or.perish|publication incentives|pressure to publish/i.test(text);
+  const integrity = /research integrity|scientific integrity|misconduct|questionable research|honesty|dishonesty|research ethics|scientific fraud|fabrication|falsification/i.test(text);
+  return incentives && integrity;
+}
+
 function searchQueries(topic, pillar) {
+  if (isPublicationPressureTopic(topic)) {
+    return ['("publication pressure" OR "pressure to publish" OR "publish or perish" OR "publication incentives") AND ("research integrity" OR misconduct OR "questionable research practices" OR honesty OR "research ethics") AND HAS_ABSTRACT:y AND SRC:MED'];
+  }
   const terms = tokens(topic);
   const queries = [];
   if (/\b(?:phd|doctoral|doctorate)\b/i.test(topic)) {
@@ -78,7 +95,7 @@ function pickEvidence(records, topic, pillar) {
     const overlap = topicTerms.filter(t => articleWords.has(t)).length;
     const fallbackOverlap = fallbackTerms.filter(t => articleWords.has(t)).length;
     return { source, overlap, fallbackOverlap };
-  }).filter(x => x.overlap >= 2 && (!/\bphd\b/i.test(topic) || /\b(?:phd|doctoral|doctorate|postgraduate)\b/i.test(x.source.title + ' ' + x.source.abstract)));
+  }).filter(x => matchesTopicContext(x.source, topic) && x.overlap >= 2 && (!/\bphd\b/i.test(topic) || /\b(?:phd|doctoral|doctorate|postgraduate)\b/i.test(x.source.title + ' ' + x.source.abstract)));
   ranked.sort((a,b) => (b.overlap - a.overlap) ||
     (b.fallbackOverlap - a.fallbackOverlap) || (b.source.year - a.source.year));
   return ranked[0]?.source || null;
@@ -134,4 +151,4 @@ function validateDraft(content, source) {
   return issues;
 }
 
-module.exports = { tokens, searchQueries, extractRecord, pickEvidence, findEvidence, validateDraft };
+module.exports = { matchesTopicContext, tokens, searchQueries, extractRecord, pickEvidence, findEvidence, validateDraft };

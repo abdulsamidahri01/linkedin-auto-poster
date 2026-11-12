@@ -84,15 +84,23 @@ async function uploadImage(imagePath, token) {
   return imageUrn;
 }
 
+// Posts API commentary uses LinkedIn little-text, not raw plain text.
+// Escape body syntax, then append validated hashtag elements separately.
+function formatCommentary(content, hashtags = []) {
+  const body = String(content).replace(/[\\|{}@\[\]()<>#*_~]/g, c => '\\' + c);
+  const tags = [...new Set((Array.isArray(hashtags) ? hashtags : [])
+    .filter(tag => typeof tag === 'string' && /^#[A-Za-z0-9_]+$/.test(tag)))].slice(0, 3);
+  return body + (tags.length ? '\n\n' + tags.join(' ') : '');
+}
+
 async function publishImagePost(content, imageUrn, hashtags, token) {
   const accessToken = token || process.env.LINKEDIN_ACCESS_TOKEN;
   if (!accessToken) throw new Error('No LinkedIn access token');
   const authorUrn = await getAuthorUrn(accessToken);
-  const hashtagLine = hashtags && hashtags.length > 0 ? '\n\n' + hashtags.slice(0, 3).join(' ') : '';
 
   const payload = {
     author: authorUrn,
-    commentary: content + hashtagLine,
+    commentary: formatCommentary(content, hashtags),
     visibility: 'PUBLIC',
     distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
     content: { media: { id: imageUrn } },
@@ -107,11 +115,10 @@ async function publishPost(content, hashtags, token) {
   const accessToken = token || process.env.LINKEDIN_ACCESS_TOKEN;
   if (!accessToken) throw new Error('No LinkedIn access token');
   const authorUrn = await getAuthorUrn(accessToken);
-  const hashtagLine = hashtags && hashtags.length > 0 ? '\n\n' + hashtags.slice(0, 3).join(' ') : '';
 
   const payload = {
     author: authorUrn,
-    commentary: content + hashtagLine,
+    commentary: formatCommentary(content, hashtags),
     visibility: 'PUBLIC',
     distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
     lifecycleState: 'PUBLISHED',
@@ -157,4 +164,5 @@ async function _doPublish(payload, accessToken) {
   }
 }
 
-module.exports = { publishPost, publishImagePost, uploadImage, getAuthorUrn };
+module.exports = { formatCommentary, publishPost, publishImagePost, uploadImage, getAuthorUrn };
+

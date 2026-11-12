@@ -98,8 +98,16 @@ function validateDraft(content, source) {
   if (!source || !source.doi || !source.abstract) {
     return ['No verified article metadata and abstract supplied'];
   }
-  if (/\b(?:I|I\x27ve|I\x27m|me|my|mine|myself|we|our|ours|ourselves|us)\b/i.test(content)) {
-    issues.push('First-person voice is prohibited without verified author experiences');
+  // Keep the conservative gate. Expose the exact match so false positives
+  // can be diagnosed without ever publishing a rejected draft.
+  const personal = /\b(?:I|I\x27ve|I\x27m|me|my|mine|myself|we|our|ours|ourselves|us)\b/i.exec(content);
+  if (personal) {
+    const excerpt = content.slice(Math.max(0, personal.index - 35), personal.index + personal[0].length + 55);
+    issues.push('First-person voice is prohibited without verified author experiences; matched '
+      + JSON.stringify(personal[0]) + ' near ' + JSON.stringify(excerpt));
+  }
+  if (/\b(?:Abdul\s+Sami(?:\s+Dahri)?|Dr\.?\s+Sami)\b/i.test(content)) {
+    issues.push('Attribution to the account owner is prohibited in automatic drafts');
   }
   if (/https?:\/\//i.test(content)) issues.push('Model-generated links are prohibited; source link is added by the application');
   const availableNumbers = new Set(

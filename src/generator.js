@@ -125,43 +125,24 @@ function viralityScore(post, source = null) {
 // ─── User prompt builder ─────────────────────────────────────────────────────
 
 function buildUserPrompt(topic, pillar, tone, attempt = 1, source = null) {
-  const ending = selectEndingType();
+  return `Requested topic (do not present this wording as a finding): ${topic}
+Pillar: ${pillar}
 
-  const escalations = [
-    '',
-    '\n\nIMPORTANT: The previous draft missed the format. Cut it to 110-190 words, shorten every paragraph, and name the supplied source and year without adding any number absent from it.',
-    '\n\nIMPORTANT: The previous draft still failed editorial review. Remove every generic transition and unsupported claim. Paraphrase only the supplied abstract; do not quote, add links, or invent statistics.',
-  ];
-  const escalation = escalations[Math.min(attempt - 1, escalations.length - 1)];
+SOURCE DATA:
+${JSON.stringify(source ? { title: source.title, journal: source.journal, year: source.year, abstract: source.abstract } : null)}
 
-  return `Today's pillar: ${pillar}
-Emotional tone: ${tone}
-Topic: ${topic}
+Write 110-150 words in six short paragraphs, each below 35 words:
+1. State what the study examined, without an evaluative or causal hook.
+2. Name the exact journal or full paper title and publication year; identify the design only if stated in the abstract.
+3. Describe one clearly supported finding using the same direction and uncertainty as the abstract.
+4. Describe another supported finding, or qualify the first if no second is available.
+5. State a limitation explicitly stated in the abstract, or the narrow boundary of what this particular study examined. Do not invent limitations or missing design details.
+6. End with a short, literal summary of the evidence, not an implication, prediction, recommendation or slogan.
 
-EVIDENCE RECORD (retrieved from Europe PMC; use ONLY this as your factual anchor):
-${source ? [
-  'Title: ' + source.title,
-  'Journal: ' + source.journal,
-  'Publication year: ' + source.year,
-  'DOI: ' + source.doi,
-  'Abstract: ' + source.abstract,
-].join('\n') : 'No evidence source supplied; do not generate factual claims.'}
-
-Write a complete LinkedIn post only if this evidence directly addresses the topic. Do not use a laboratory protocol to make claims about PhD training or career decisions. Every factual sentence must be supported by the abstract. Avoid universal or causal claims absent from the source; do not state what the authors did not discover. Base its factual assertions on the evidence record, not on your recalled knowledge.
-
-The post must:
-- Use a calm, plain-spoken, fact-led LinkedIn voice. Do not imitate any individual writer or reuse their phrasing.
-- Start with a clear observation, claim, or surprising fact about the topic. No grand statement about humanity, no rhetorical question, and no dramatic hook formula.
-- Develop one argument through 5-8 short paragraphs. Keep every paragraph below 43 words.
-- Name the source journal or paper in the body and cite its publication year. Use only numbers that occur in the supplied evidence record. Do not manufacture percentages, counts, dates, quotes, or interpretations.
-- Paraphrase the supplied abstract carefully; do not use direct quotations or introduce a second unverified study.
-- Never write in first person (I, my, we, our), invent personal experience, or place URLs in the generated text. The application adds the source DOI link after validation.
-- Include one concise line that naturally crystallizes the argument, without turning it into a slogan.
-- End with the practical implication or an unresolved, thoughtful observation. Do not force a CTA.
-- Use no emojis, decorative symbols, bullet lists, headings, or markdown. Avoid em-dashes and buzzwords.
-- Be readable on mobile: plain sentences, whitespace between paragraphs, and no giant blocks.
-- Be between 110 and 190 words total. Shorter is better when the point is complete.
-- ${ending.instruction}${escalation}`;
+Use third person only. No invented experiences or quotations. Never compare strength of effects unless the abstract explicitly supports the comparison. Do not reinterpret weak or uncertain moderation as a protective effect. Optional numbers must appear in the source; the publication year is sufficient. Omit other numbers unless needed.
+Every sentence must be supported by this source. Do not extrapolate from individual associations to system-level causes.
+This is attempt ${attempt}; if correcting a prior draft, delete unsupported claims rather than replacing them with new speculative claims.
+No URL; the application appends the citation.`;
 }
 
 // ─── OpenRouter call ─────────────────────────────────────────────────────────
@@ -172,7 +153,7 @@ async function callOpenRouter(messages, model) {
 
   const response = await axios.post(
     OPENROUTER_API,
-    { model, messages, max_tokens: 1000, temperature: 0.35 },
+    { model, messages, max_tokens: 1000, temperature: 0.15 },
     {
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -192,8 +173,9 @@ async function callOpenRouter(messages, model) {
 // ─── Main generator ──────────────────────────────────────────────────────────
 
 async function generatePost(topicData, options = {}) {
-  const { topic, pillar, tone } = topicData;
-  const endingType = selectEndingType().type;
+  const { topic, pillar } = topicData;
+  const tone = 'neutral evidence summary';
+  const endingType = 'evidence_summary';
   const models = getModels();
   // Evidence retrieval is mandatory: no source means no automatic post.
   const evidence = await (options.findEvidence || findEvidence)(topic, pillar);
@@ -221,7 +203,7 @@ async function generatePost(topicData, options = {}) {
           + previousFeedback.join('; ')
           + '. Use third-person prose only, with no I, me, my, we, our, or us. Name this exact source journal or paper: '
           + (evidence.journal || evidence.title) + ', and cite ' + evidence.year
-          + '. Use 5-8 short paragraphs, 110-190 words, and end with a short complete statement. Preserve the source limitations; do not invent experience or facts.' });
+          + '. Use six short paragraphs, 110-150 words, and end with a literal evidence summary. Delete unsupported claims instead of inventing implications. Preserve the source limitations; do not invent experience or facts.' });
       }
 
       const { content: raw, model } = await callOpenRouter(messages, models[modelIndex]);

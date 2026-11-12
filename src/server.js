@@ -17,7 +17,7 @@ const app = express();
 app.use(express.json({ limit: '32kb' }));
 
 const PORT = process.env.PORT || 3000;
-const VERSION = '2.6.0'; // Source-first publishing gates + analytics ingestion
+const VERSION = '2.7.0'; // Source-first publishing gates + analytics ingestion
 
 // ── Startup checks ────────────────────────────────────────────────────────────
 
@@ -112,3 +112,4 @@ app.listen(PORT, () => {
 
   console.log('[server] Ready\n');
 });
+

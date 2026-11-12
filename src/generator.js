@@ -131,13 +131,11 @@ Pillar: ${pillar}
 SOURCE DATA:
 ${JSON.stringify(source ? { title: source.title, journal: source.journal, year: source.year, abstract: source.abstract } : null)}
 
-Write 110-150 words in six short paragraphs, each below 35 words:
-1. State what the study examined, without an evaluative or causal hook.
-2. Name the exact journal or full paper title and publication year; identify the design only if stated in the abstract.
-3. Describe one clearly supported finding using the same direction and uncertainty as the abstract.
-4. Describe another supported finding, or qualify the first if no second is available.
-5. State a limitation explicitly stated in the abstract, or the narrow boundary of what this particular study examined. Do not invent limitations or missing design details.
-6. End with a short, literal summary of the evidence, not an implication, prediction, recommendation or slogan.
+Write a readable 80-160 word summary in 3-6 short paragraphs. A shorter accurate summary is better than padding.
+Describe what the study examined and its main findings. Keep qualifications and uncertainty from the abstract.
+Mention a limitation only if the abstract states it. Do not invent a limitation or say that limitations are missing.
+Do not force a second finding, implication, or concluding slogan. Stop when the supported findings have been reported.
+The application adds the exact title, year and DOI separately; repeating them in the body is optional.
 
 Use third person only. No invented experiences or quotations. Never compare strength of effects unless the abstract explicitly supports the comparison. Do not reinterpret weak or uncertain moderation as a protective effect. Optional numbers must appear in the source; the publication year is sufficient. Omit other numbers unless needed.
 Every sentence must be supported by this source. Do not extrapolate from individual associations to system-level causes.
@@ -165,6 +163,7 @@ async function callOpenRouter(messages, model) {
     }
   );
 
+  if (response.data?.choices?.[0]?.finish_reason === "length") throw new Error("Truncated model response");
   const content = response.data?.choices?.[0]?.message?.content?.trim();
   if (!content) throw new Error('Empty response from OpenRouter');
   return { content, model };
@@ -173,12 +172,14 @@ async function callOpenRouter(messages, model) {
 // ─── Main generator ──────────────────────────────────────────────────────────
 
 async function generatePost(topicData, options = {}) {
-  const { topic, pillar } = topicData;
+  const { topic: searchTopic, pillar } = topicData;
   const tone = 'neutral evidence summary';
   const endingType = 'evidence_summary';
   const models = getModels();
   // Evidence retrieval is mandatory: no source means no automatic post.
-  const evidence = await (options.findEvidence || findEvidence)(topic, pillar);
+  const evidence = await (options.findEvidence || findEvidence)(searchTopic, pillar);
+  // The actual paper defines the subject, never a speculative curated headline.
+  const topic = evidence.title;
 
   console.log(`[generator] Topic: "${topic}"`);
   console.log(`[generator] Pillar: ${pillar} | Tone: ${tone}`);
@@ -203,22 +204,27 @@ async function generatePost(topicData, options = {}) {
           + previousFeedback.join('; ')
           + '. Use third-person prose only, with no I, me, my, we, our, or us. Name this exact source journal or paper: '
           + (evidence.journal || evidence.title) + ', and cite ' + evidence.year
-          + '. Use six short paragraphs, 110-150 words, and end with a literal evidence summary. Delete unsupported claims instead of inventing implications. Preserve the source limitations; do not invent experience or facts.' });
+          + '. Use short paragraphs and only supported findings; do not pad the draft. Delete unsupported claims instead of inventing implications. Preserve the source limitations; do not invent experience or facts.' });
       }
 
       const { content: raw, model } = await callOpenRouter(messages, models[modelIndex]);
       const content = polishContent(raw);
-      const { score, passed, feedback } = viralityScore(content, evidence);
+      const { score, feedback } = viralityScore(content, evidence);
+      // Editorial preferences are advisory; factual safety remains mandatory.
+      const wordCount = content.split(/\s+/).length;
+      const passed = wordCount >= 40 && content.length <= 2400;
+      if (!passed) feedback.push("Draft is empty, too short, or exceeds the publication length limit");
       const safetyIssues = validateDraft(content, evidence);
       if (passed && safetyIssues.length === 0) {
         safetyIssues.push(...await reviewClaims(content, evidence, topic, model));
       }
       feedback.push(...safetyIssues);
       previousDraft = content;
-      previousFeedback = [...feedback];
+      previousFeedback = [...safetyIssues];
+      if (!passed) previousFeedback.push("Keep the draft between 40 words and 2400 characters");
 
-      console.log(`[generator] V4 score: ${score}/100 | passed: ${passed}`);
-      feedback.forEach(f => console.log(`[generator]   x ${f}`));
+      console.log(`[generator] Editorial score: ${score}/100 | safety passed: ${passed && safetyIssues.length === 0}`);
+      safetyIssues.forEach(f => console.log(`[generator]   blocked: ${f}`));
 
       lastScore = score;
 
@@ -226,8 +232,8 @@ async function generatePost(topicData, options = {}) {
         console.log(`[generator] Approved (score: ${score}/100)`);
         return {
           content: content + '\n\nSource: ' + evidence.title + ' (' + evidence.year + '), ' + evidence.url,
-          score, model, attempt, endingType,
-          evidence: { title: evidence.title, doi: evidence.doi, url: evidence.url, year: evidence.year },
+          score, model, attempt, endingType, topic, searchTopic,
+          evidence: { title: evidence.title, journal: evidence.journal, doi: evidence.doi, url: evidence.url, year: evidence.year },
         };
       }
 
@@ -250,3 +256,4 @@ async function generatePost(topicData, options = {}) {
 }
 
 module.exports = { generatePost, viralityScore, buildUserPrompt, polishContent };
+

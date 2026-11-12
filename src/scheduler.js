@@ -70,7 +70,7 @@ async function runDailyJob(jobId) {
     let hasImage = false;
 
     try {
-      const imagePath = await generateImage(topicData.pillar, topicData.topic, generated.content);
+      const imagePath = await generateImage(topicData.pillar, generated.topic || topicData.topic, generated.content);
       console.log(`[scheduler] Image generated: ${imagePath}`);
 
       const imageUrn = await uploadImage(imagePath);
@@ -96,7 +96,7 @@ async function runDailyJob(jobId) {
 
     // 5. Log
     logPost({
-      topic: topicData.topic,
+      topic: generated.topic || topicData.topic,
       pillar: topicData.pillar,
       content: generated.content,
       score: generated.score,
@@ -133,3 +133,4 @@ function startScheduler() {
 }
 
 module.exports = { startScheduler, runDailyJob };
+

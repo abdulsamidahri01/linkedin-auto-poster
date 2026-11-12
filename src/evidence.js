@@ -102,15 +102,36 @@ function pickEvidence(records, topic, pillar) {
 }
 
 async function findEvidence(topic, pillar, http = axios) {
+  // Curated headlines are preferences, not claims a paper must somehow prove.
+  // Retrieve within the weekly pillar, then let the selected paper define the post.
+  const pillarSearch = {
+    'AI + MICROBIOLOGY': ['(microbiology OR bacteria OR microbial) AND ("machine learning" OR "artificial intelligence")', /microbi|bacter/i, /machine learning|artificial intelligence/i],
+    'CLINICAL BLIND SPOTS': ['(infection OR microbiology) AND (diagnostic OR diagnosis)', /infection|microbi/i, /diagnos/i],
+    'MICROBIAL INTELLIGENCE': ['(bacterial OR microbial) AND ("quorum sensing" OR biofilm)', /bacter|microbi/i, /quorum sensing|biofilm/i],
+    'ACADEMIC / RESEARCH REALITY': ['("research integrity" OR "research culture" OR "publication pressure" OR "research reproducibility")', /research integrity|research culture|publication pressure|research reproducibility/i],
+    'FUTURE HEALTHCARE SYSTEMS': ['(healthcare OR clinical) AND ("artificial intelligence" OR "digital health")', /healthcare|clinical/i, /artificial intelligence|digital health/i],
+    'PUBLIC HEALTH + AMR': ['("antimicrobial resistance" OR "antibiotic resistance") AND (surveillance OR "public health")', /antimicrobial resistance|antibiotic resistance/i, /surveillance|public health/i],
+    'REFLECTIVE / PHILOSOPHICAL SCIENCE': ['("scientific uncertainty" OR "research reproducibility" OR "research ethics")', /scientific uncertainty|research reproducibility|research ethics/i],
+  }[pillar];
+  if (!pillarSearch) throw new Error('Unknown editorial pillar; no source selected');
   let lastError;
-  for (const query of searchQueries(topic, pillar)) {
+  let nextCursor;
+  const query = '(' + pillarSearch[0] + ') AND HAS_ABSTRACT:y AND SRC:MED';
+  // Up to two pages, bounded before any paid generation.
+  for (const cursorMark of ['*', null]) {
     try {
       const response = await http.get(EUROPE_PMC, {
-        params: { query, format: 'json', resultType: 'core', pageSize: 25 },
+        params: { query, format: 'json', resultType: 'core', pageSize: 25, cursorMark: cursorMark || nextCursor },
         timeout: 12000,
       });
-      const source = pickEvidence(response.data?.resultList?.result, topic, pillar);
-      if (source) return source;
+      const candidates = (response.data?.resultList?.result || []).map(extractRecord).filter(Boolean)
+        .filter(s => pillarSearch.slice(1).every(pattern => pattern.test(s.title + ' ' + s.abstract)));
+      const terms = tokens(topic);
+      const overlap = s => terms.filter(t => tokens(s.title + ' ' + s.abstract).includes(t)).length;
+      candidates.sort((a, b) => overlap(b) - overlap(a) || b.year - a.year);
+      if (candidates.length) return candidates[0];
+      nextCursor = response.data?.nextCursorMark;
+      if (!nextCursor || nextCursor === cursorMark) break;
     } catch (err) {
       lastError = err;
     }
@@ -152,3 +173,4 @@ function validateDraft(content, source) {
 }
 
 module.exports = { matchesTopicContext, tokens, searchQueries, extractRecord, pickEvidence, findEvidence, validateDraft };
+
